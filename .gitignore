@@ -59,3 +59,8 @@ dist/
 web-build/ 
 
 lib/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
