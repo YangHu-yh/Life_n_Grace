@@ -15,7 +15,7 @@ These instructions assume you have the project files in a directory named `life_
 1.  **Navigate to the Project Directory**:
     Open your terminal and change to the project's root directory (the `life_n_grace` folder):
     ```bash
-    cd path/to/your/project/root
+    cd path/to/your/life_n_grace
     ```
 
 2.  **Create and Activate a Virtual Environment** (Recommended):

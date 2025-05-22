@@ -82,7 +82,7 @@
         
         <div class="row">
             <div class="col-lg-8 mx-auto">
-                <!-- Bible Verses -->
+                <!-- Bible Verse for Prayer -->
                 <h2 class="h3 mb-4">Bible Verse for This Prayer</h2>
                 <div class="card verse-card mb-3">
                     <div class="card-body">
@@ -91,6 +91,24 @@
                         </blockquote>
                     </div>
                 </div>
+                
+                <!-- Related Bible Verses -->
+                {% if verses|length > 1 %}
+                <h2 class="h3 mb-4 mt-5">More Bible Verses on {{ topic }}</h2>
+                <div class="card verse-card mb-3">
+                    <div class="card-body">
+                        <ul class="list-div mb-0">
+                        {% for verse_text in verses %}
+                            {% if verse_text != verse %}
+                            <li class="mb-2">
+                                {{ verse_text }}
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
                 
                 <!-- Prayer -->
                 <h2 class="h3 mb-4 mt-5">Prayer Suggestion</h2>

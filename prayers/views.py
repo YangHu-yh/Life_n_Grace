@@ -216,7 +216,7 @@ def topic_prayer_view(request, topic):
     # Get Bible verses for this topic
     verses = get_bible_verses_for_topic(topic)
     
-    # If this is an AJAX request, we'll select a specific verse and generate a prayer based on it
+    # For AJAX requests, just return a new prayer with existing verses
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         # Select a verse
         selected_verse = random.choice(verses) if verses else ""
@@ -259,6 +259,52 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
     
     # For non-AJAX requests (initial page load), select a verse and generate a prayer
     selected_verse = random.choice(verses) if verses else ""
+    
+    # Get additional Bible verses related to the topic
+    additional_verses = []
+    if model:
+        try:
+            prompt = f"""Provide 7 more Bible verses related to the topic of "{topic}". 
+Format each as "Book Chapter:Verse - The verse text." 
+Use different books and chapters for variety. Don't include any explanations, just the verses."""
+            
+            response = model.generate_content(prompt)
+            
+            if hasattr(response, 'text'):
+                verses_text = response.text
+            elif response.parts:
+                verses_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+            else:
+                if response.candidates and response.candidates[0].content.parts:
+                    verses_text = ''.join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
+                else:
+                    verses_text = ""
+            
+            # Process the text to extract verses
+            if verses_text:
+                for line in verses_text.strip().split('\n'):
+                    line = line.strip()
+                    # Skip empty lines, code blocks, headings, and explanatory text
+                    if not line or line.startswith('```') or line.startswith('#') or line.startswith('Okay') or line.startswith('Here'):
+                        continue
+                    
+                    # Remove numbering like "1." or "1)" or "1 -" at the beginning of the line
+                    line = line.lstrip('0123456789.)-[] ')
+                    
+                    # Remove any "- " prefix since we're adding that in the template
+                    if line.startswith('- '):
+                        line = line[2:]
+                    
+                    if line:  # Only add non-empty lines
+                        additional_verses.append(line)
+        except Exception as e:
+            print(f"Error getting additional verses: {e}")
+    
+    # Combine original verses with additional ones, but don't exceed 10 total
+    all_verses = verses.copy()
+    for verse in additional_verses:
+        if verse not in all_verses and len(all_verses) < 10:
+            all_verses.append(verse)
     
     # Generate prayer using the selected verse
     if not model:
@@ -304,7 +350,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
     context = {
         'topic': topic,
         'verse': selected_verse,  # Pass only the selected verse, not all verses
-        'verses': [selected_verse],  # For backward compatibility with the template
+        'verses': all_verses,  # Pass all verses for the topic including additional ones
         'prayer': prayer_text,
         'references': references
     }
