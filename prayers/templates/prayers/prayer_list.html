@@ -1,0 +1,805 @@
+{% load prayer_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life 'n' Grace - Prayer Journal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #5468ff;
+            --secondary-color: #6c757d;
+            --light-bg: #f8f9fa;
+            --dark-text: #343a40;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+            line-height: 1.6;
+        }
+        
+        .bg-soft-primary {
+            background-color: rgba(84, 104, 255, 0.1);
+        }
+        
+        .text-primary {
+            color: var(--primary-color) !important;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary:hover {
+            background-color: #4557e6;
+            border-color: #4557e6;
+        }
+        
+        .btn-outline-primary {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+        
+        .kanban-column {
+            min-height: 400px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .kanban-column-header {
+            border-bottom: 2px solid var(--light-bg);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .meta-info {
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+        }
+        
+        .prayer-card {
+            margin-bottom: 1rem;
+            border-left: 3px solid transparent;
+        }
+        
+        .prayer-card.new {
+            border-left-color: #0d6efd;
+        }
+        
+        .prayer-card.praying {
+            border-left-color: #ffc107;
+        }
+        
+        .prayer-card.accomplished {
+            border-left-color: #198754;
+        }
+        
+        .prayer-card.changed_or_no_longer_needed {
+            border-left-color: #6c757d;
+        }
+        
+        .badge.ai-generated {
+            background-color: #9c27b0;
+        }
+        
+        .badge.edited {
+            background-color: #f57c00;
+        }
+        
+        .prayers-section {
+            margin-top: 3rem;
+        }
+        
+        .form-section {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .form-section h2 {
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .topic-badge {
+            cursor: pointer;
+            background-color: #f0f0f0;
+            color: var(--dark-text);
+            border: none;
+            transition: all 0.2s;
+            text-align: left;
+            margin-bottom: 0.5rem;
+            font-weight: normal;
+            padding: 0.5rem 1rem;
+        }
+        
+        .topic-badge:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .prayer-dropdown {
+            position: absolute; 
+            bottom: 10px;
+            right: 10px;
+        }
+        
+        .prayer-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        #aiGeneratedPreview {
+            display: none;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px dashed #dee2e6;
+        }
+        
+        #aiLoader {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        
+        .ai-preview-title {
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .spinner-border {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-width: 0.2rem;
+        }
+        
+        .preview-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        #topicPreviewContainer {
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(84, 104, 255, 0.2);
+            position: relative;
+        }
+        
+        #topicPreviewContent {
+            display: none; /* Initially hidden until content loads */
+        }
+        
+        .topic-preview-title {
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        .preview-verse {
+            background-color: rgba(255, 193, 7, 0.1);
+            border-left: 3px solid #ffc107;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            margin-bottom: 1rem;
+            font-style: italic;
+        }
+        
+        .preview-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            cursor: pointer;
+            color: var(--secondary-color);
+        }
+        
+        .preview-close:hover {
+            color: var(--dark-text);
+        }
+        
+        .topic-buttons {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .random-topic-btn {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white">
+    <div class="container">
+            <a class="navbar-brand" href="{% url 'prayer_list' %}">
+                <span class="fw-bold text-primary">Life 'n' Grace</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'prayer_list' %}">Prayer Journal</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">About</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-lg-8 mx-auto text-center mb-5">
+                <h1 class="display-5 fw-bold">My Prayer Journal</h1>
+                <p class="lead text-muted">Note down your prayers, track their progress, and receive AI-generated prayer suggestions.</p>
+            </div>
+        </div>
+        
+        <!-- Top Row: Add Prayer and Generate AI Prayer -->
+        <div class="row mb-5">
+            <!-- Left side: Add a New Prayer -->
+            <div class="col-lg-6 mb-4">
+                <div class="form-section h-100">
+                    <h2>Add a New Prayer</h2>
+                    <form method="post" action="{% url 'add_prayer' %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="{{ prayer_form.text.id_for_label }}" class="form-label">Your Prayer</label>
+                            {{ prayer_form.text|add_class:"form-control" }}
+                        </div>
+                        <div class="mb-3">
+                            <label for="{{ prayer_form.status.id_for_label }}" class="form-label">Status</label>
+                            {{ prayer_form.status|add_class:"form-select" }}
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Add Prayer</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Right side: Generate AI Prayer -->
+            <div class="col-lg-6 mb-4">
+                <div class="form-section h-100">
+                    <h2>Generate Prayer with AI</h2>
+                    
+                    <!-- Custom Prayer Request -->
+                    <form method="post" action="{% url 'suggest_ai_prayer' %}" id="aiPrayerForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="{{ ai_prompt_form.prompt.id_for_label }}" class="form-label">Custom Prayer Request:</label>
+                            {{ ai_prompt_form.prompt|add_class:"form-control form-control-sm" }}
+                            <small class="text-muted">e.g., 'Strength during a challenging time' or 'Gratitude for a new opportunity'</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Prayer Length:</label>
+                            <div class="d-flex gap-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="word_count" id="wordCount0" value="short">
+                                    <label class="form-check-label" for="wordCount0">
+                                        Short<br>
+                                        <small>(0-100 words)</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="word_count" id="wordCount1" value="medium" checked>
+                                    <label class="form-check-label" for="wordCount1">
+                                        Medium<br>
+                                        <small>(100-200 words)</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="word_count" id="wordCount2" value="long">
+                                    <label class="form-check-label" for="wordCount2">
+                                        Long<br>
+                                        <small>(200-500 words)</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="generatePrayerBtn" class="btn btn-primary">
+                            <i class="bi bi-lightbulb me-2"></i>Generate Prayer
+                        </button>
+                    </form>
+                    
+                    <!-- Loading indicator -->
+                    <div id="aiLoader">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Generating your prayer...</p>
+                    </div>
+                    
+                    <!-- AI Generated Prayer Preview -->
+                    <div id="aiGeneratedPreview">
+                        <h5 class="ai-preview-title">
+                            <i class="bi bi-stars me-2"></i>AI-Generated Prayer Preview
+                        </h5>
+                        <div class="mb-3">
+                            <textarea id="previewPrayerText" class="form-control" rows="8" placeholder="Your AI-generated prayer will appear here"></textarea>
+                            <div class="small text-muted mt-2" id="prayerReference"></div>
+                        </div>
+                        <div class="preview-actions">
+                            <form id="saveGeneratedPrayerForm" method="post" action="{% url 'save_generated_prayer' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="prayer_text" id="hiddenPrayerText">
+                                <input type="hidden" name="references" id="hiddenReferences">
+                                <select name="status" class="form-select form-select-sm d-inline-block me-2" style="width: auto;">
+                                    {% for status_val, status_display in prayer_form.fields.status.choices %}
+                                    <option value="{{ status_val }}">{{ status_display }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-save me-2"></i>Save to Journal
+                                </button>
+                            </form>
+                            <button class="btn btn-outline-secondary" id="cancelPreviewBtn">
+                                <i class="bi bi-x-circle me-2"></i>Cancel
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {% if generated_prayer %}
+                    <script>
+                        // Show the previously generated prayer that wasn't saved
+                        document.addEventListener('DOMContentLoaded', function() {
+                            document.getElementById('aiGeneratedPreview').style.display = 'block';
+                            document.getElementById('previewPrayerText').value = `{{ generated_prayer|escapejs }}`;
+                            document.getElementById('hiddenPrayerText').value = `{{ generated_prayer|escapejs }}`;
+                            document.getElementById('prayerReference').innerHTML = `{{ generated_references|escapejs }}`;
+                            document.getElementById('hiddenReferences').value = `{{ generated_references|escapejs }}`;
+                        });
+                    </script>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Middle Section: Pray by Topic -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="form-section">
+                    <h2 class="mb-4">Pray by Topic</h2>
+                    
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <!-- Topic Preview Container (Now as a main section) -->
+                            <div id="topicPreviewContainer" class="p-4 border rounded bg-light">
+                                <div id="topicPreviewLoader" class="text-center my-5 py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading prayer suggestion...</p>
+                                </div>
+                                
+                                <div id="topicPreviewContent">
+                                    <h5 class="topic-preview-title">
+                                        <i class="bi bi-bookmark-heart me-2"></i><span id="previewTopicTitle"></span>
+                                    </h5>
+                                    <div class="preview-verse" id="previewVerse"></div>
+                                    <p id="previewPrayer"></p>
+                                    <button id="seeAnotherPrayer" class="btn btn-sm btn-outline-info mb-3">
+                                        <i class="bi bi-arrow-repeat me-1"></i>See another prayer
+                                    </button>
+                                    <div class="small text-muted mb-3" id="previewTopicReference"></div>
+                                    <div class="d-flex justify-content-between">
+                                        <a id="seeMoreLink" href="#" class="btn btn-sm btn-primary">
+                                            <i class="bi bi-journal-text me-1"></i>See more verses & prayers
+                                        </a>
+                                        <button id="saveTopicPrayer" class="btn btn-sm btn-success">
+                                            <i class="bi bi-save me-1"></i>Save this prayer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4">
+                            <!-- Prayer Topics -->
+                            <div class="mb-4">
+                                <div class="topic-buttons">
+                                    <h5 class="mb-3">Suggested Prayer Topics:</h5>
+                                    <button id="randomTopicBtn" class="btn btn-sm btn-outline-primary mb-3 w-100">
+                                        <i class="bi bi-shuffle me-1"></i>Choose a random topic
+                                    </button>
+                                </div>
+                                <div class="d-flex flex-column gap-2">
+                                    {% for topic, verses in prayer_topics.items %}
+                                        <button type="button" class="btn btn-sm btn-outline-secondary topic-badge topic-preview-btn" data-topic="{{ topic }}">
+                                            {{ topic }}
+                                        </button>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Section: Your Prayers Kanban Board -->
+        <div class="prayers-section">
+            <h2 class="display-6 fw-bold mb-4">Your Prayers</h2>
+            
+            <!-- Kanban Board -->
+            <div class="row">
+            {% for status_val, status_display in prayer_form.fields.status.choices %}
+                <div class="col-md-3 mb-4">
+                    <div class="kanban-column">
+                        <div class="kanban-column-header text-center">
+                            {{ status_display }}
+                        </div>
+                        <div class="p-3">
+                    {% for prayer in prayers %}
+                        {% if prayer.status == status_val %}
+                            <div class="card prayer-card {{ status_val }}" id="prayer-{{ prayer.id }}">
+                                <div class="card-body">
+                                    <p class="card-text">{{ prayer.text }}</p>
+                                    <div class="meta-info mb-2">
+                                        <div>Created: {{ prayer.created_at|date:"M d, Y" }} ({{ prayer.age_in_days }} days ago)</div>
+                                        <div>Prayed over: {{ prayer.clicked_as_prayed_over_count }} times</div>
+                                    </div>
+                                    
+                                    <div class="d-flex gap-1 mb-2">
+                                        {% if prayer.is_ai_generated %}
+                                        <span class="badge ai-generated">AI Generated</span>
+                                        {% endif %}
+                                        
+                                {% if prayer.has_been_changed %}
+                                        <span class="badge edited">Edited</span>
+                                {% endif %}
+                                    </div>
+                                    
+                                {% if prayer.is_ai_generated %}
+                                    <div class="meta-info small fst-italic mb-2">
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        <small>{{ prayer.ai_generation_references }}</small>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="prayer-actions mt-3">
+                                        <form method="post" action="{% url 'mark_as_prayed_over' prayer.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-heart-fill me-1"></i>Prayed
+                                            </button>
+                                        </form>
+                                        
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                Move to
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                {% for status_option, status_label in prayer_form.fields.status.choices %}
+                                                    {% if status_option != prayer.status %}
+                                                    <li>
+                                                        <form method="post" action="{% url 'update_prayer_status' prayer.id %}">
+                                                            {% csrf_token %}
+                                                            <input type="hidden" name="status" value="{{ status_option }}">
+                                                            <button type="submit" class="dropdown-item">{{ status_label }}</button>
+                                                        </form>
+                                                    </li>
+                                {% endif %}
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="bi bi-magic me-1"></i>AI Suggest
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <form method="post" action="{% url 'generate_from_existing' prayer.id 'short' %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="dropdown-item">Short Version (0-100 words)</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" action="{% url 'generate_from_existing' prayer.id 'medium' %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="dropdown-item">Medium Length (100-200 words)</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" action="{% url 'generate_from_existing' prayer.id 'long' %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="dropdown-item">Long Version (200-500 words)</button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <form method="post" action="{% url 'delete_prayer' prayer.id %}" onsubmit="return confirm('Are you sure you want to delete this prayer?');">
+                                        {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash me-1"></i>Delete
+                                            </button>
+                                    </form>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                            
+                            {% if not prayers|filter_by_status:status_val %}
+                            <div class="text-center text-muted p-4">
+                                <i class="bi bi-inbox fs-2"></i>
+                                <p class="mt-2">No prayers here yet</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        </div>
+
+    <!-- Footer -->
+    <footer class="bg-white py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-0">&copy; {% now "Y" %} Life 'n' Grace. All rights reserved.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0">Made with <i class="bi bi-heart-fill text-danger"></i> and Django</p>
+                </div>
+            </div>
+    </div>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js" integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO" crossorigin="anonymous"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle AI prayer generation via AJAX
+            const aiPrayerForm = document.getElementById('generatePrayerBtn').closest('form');
+            const generatePrayerBtn = document.getElementById('generatePrayerBtn');
+            const aiLoader = document.getElementById('aiLoader');
+            const aiGeneratedPreview = document.getElementById('aiGeneratedPreview');
+            const previewPrayerText = document.getElementById('previewPrayerText');
+            const prayerReference = document.getElementById('prayerReference');
+            const hiddenPrayerText = document.getElementById('hiddenPrayerText');
+            const hiddenReferences = document.getElementById('hiddenReferences');
+            const cancelPreviewBtn = document.getElementById('cancelPreviewBtn');
+            
+            // Topic preview elements
+            const topicPreviewBtns = document.querySelectorAll('.topic-preview-btn');
+            const randomTopicBtn = document.getElementById('randomTopicBtn');
+            const topicPreviewContainer = document.getElementById('topicPreviewContainer');
+            const previewTopicTitle = document.getElementById('previewTopicTitle');
+            const previewVerse = document.getElementById('previewVerse');
+            const previewPrayer = document.getElementById('previewPrayer');
+            const previewTopicReference = document.getElementById('previewTopicReference');
+            const seeMoreLink = document.getElementById('seeMoreLink');
+            const seeAnotherPrayer = document.getElementById('seeAnotherPrayer');
+            const saveTopicPrayer = document.getElementById('saveTopicPrayer');
+            
+            // Variables to store current topic prayer data
+            let currentTopicData = null;
+            
+            // Auto-select a random prayer topic on page load
+            // Use a slight delay to ensure all DOM elements are properly initialized
+            setTimeout(() => {
+                fetchTopicPreview('random');
+            }, 300);
+            
+            // Handle topic preview button clicks
+            if (topicPreviewBtns) {
+                topicPreviewBtns.forEach(button => {
+                    button.addEventListener('click', function() {
+                        const topic = this.getAttribute('data-topic');
+                        fetchTopicPreview(topic);
+                    });
+                });
+            }
+            
+            // Handle random topic button click
+            if (randomTopicBtn) {
+                randomTopicBtn.addEventListener('click', function() {
+                    fetchTopicPreview('random');
+                });
+            }
+            
+            // Handle "See another prayer" button click
+            if (seeAnotherPrayer) {
+                seeAnotherPrayer.addEventListener('click', function() {
+                    if (currentTopicData && currentTopicData.topic) {
+                        // Fetch a new prayer for the same topic
+                        fetchTopicPreview(currentTopicData.topic);
+                    }
+                });
+            }
+            
+            // Handle saving the topic prayer
+            if (saveTopicPrayer) {
+                saveTopicPrayer.addEventListener('click', function() {
+                    if (currentTopicData) {
+                        // Create form data for saving
+                        const formData = new FormData();
+                        formData.append('prayer_text', currentTopicData.prayer);
+                        formData.append('references', currentTopicData.references);
+                        formData.append('status', 'new');
+                        
+                        // Send AJAX request to save the prayer
+                        fetch('{% url 'save_generated_prayer' %}', {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Prayer saved successfully!');
+                                // Reload the page to show the new prayer
+                                window.location.reload();
+                            } else {
+                                alert('Error saving prayer: ' + (data.error || 'Unknown error'));
+                            }
+                        })
+                        .catch(error => {
+                            alert('Error: ' + error.message);
+                        });
+                    }
+                });
+            }
+            
+            // Function to fetch topic preview
+            function fetchTopicPreview(topic) {
+                // Show loading, hide content
+                document.getElementById('topicPreviewLoader').style.display = 'block';
+                document.getElementById('topicPreviewContent').style.display = 'none';
+                
+                // Fetch the preview
+                fetch(`/prayers/topic_preview/${encodeURIComponent(topic)}/`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loader, show content
+                    document.getElementById('topicPreviewLoader').style.display = 'none';
+                    document.getElementById('topicPreviewContent').style.display = 'block';
+                    
+                    if (data.success) {
+                        // Store the data
+                        currentTopicData = data;
+                        
+                        // Update the preview
+                        previewTopicTitle.textContent = data.topic;
+                        previewVerse.textContent = data.verse;
+                        previewPrayer.textContent = data.prayer;
+                        previewTopicReference.textContent = data.references;
+                        seeMoreLink.href = data.topic_url;
+                    } else {
+                        previewPrayer.textContent = "Error: " + (data.error || "Failed to generate topic preview");
+                        previewTopicTitle.textContent = "Error";
+                        previewVerse.textContent = "";
+                        previewTopicReference.textContent = "";
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('topicPreviewLoader').style.display = 'none';
+                    document.getElementById('topicPreviewContent').style.display = 'block';
+                    previewPrayer.textContent = "Error: " + error.message;
+                    previewTopicTitle.textContent = "Error";
+                    previewVerse.textContent = "";
+                    previewTopicReference.textContent = "";
+                });
+            }
+            
+            // Handle generate prayer button click
+            if (generatePrayerBtn) {
+                generatePrayerBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Show loading indicator
+                    aiLoader.style.display = 'block';
+                    
+                    // Hide any existing preview
+                    aiGeneratedPreview.style.display = 'none';
+                    
+                    // Collect form data
+                    const formData = new FormData(aiPrayerForm);
+                    
+                    // Send AJAX request to the AI prayer endpoint
+                    fetch('{% url 'suggest_ai_prayer' %}', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Hide loader
+                        aiLoader.style.display = 'none';
+                        
+                        if (data.success) {
+                            // Show preview with the generated prayer
+                            previewPrayerText.value = data.prayer;
+                            prayerReference.textContent = data.references;
+                            hiddenPrayerText.value = data.prayer;
+                            hiddenReferences.value = data.references;
+                            aiGeneratedPreview.style.display = 'block';
+                        } else {
+                            // Show error
+                            alert('Error: ' + (data.error || 'Failed to generate prayer'));
+                        }
+                    })
+                    .catch(error => {
+                        aiLoader.style.display = 'none';
+                        alert('Error: ' + error.message);
+                    });
+                });
+            }
+            
+            // Handle preview text changes
+            if (previewPrayerText) {
+                previewPrayerText.addEventListener('input', function() {
+                    hiddenPrayerText.value = previewPrayerText.value;
+                });
+            }
+            
+            // Handle cancel button
+            if (cancelPreviewBtn) {
+                cancelPreviewBtn.addEventListener('click', function() {
+                    aiGeneratedPreview.style.display = 'none';
+                    previewPrayerText.value = '';
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

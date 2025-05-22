@@ -1,0 +1,218 @@
+{% load prayer_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ topic }} Prayer | Life 'n' Grace</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #5468ff;
+            --secondary-color: #6c757d;
+            --light-bg: #f8f9fa;
+            --dark-text: #343a40;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+            line-height: 1.6;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 1.5rem;
+        }
+        
+        .verse-card {
+            border-left: 3px solid #ffc107;
+        }
+        
+        .prayer-card {
+            border-left: 3px solid #5468ff;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'prayer_list' %}">
+                <span class="fw-bold text-primary">Life 'n' Grace</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'prayer_list' %}">Prayer Journal</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">About</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-lg-8 mx-auto text-center mb-5">
+                <h1 class="display-5 fw-bold">{{ topic }}</h1>
+                <p class="lead text-muted">Bible verses and prayer for this topic.</p>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <!-- Bible Verse for Prayer -->
+                <h2 class="h3 mb-4">Bible Verse for This Prayer</h2>
+                <div class="card verse-card mb-3">
+                    <div class="card-body">
+                        <blockquote class="mb-0">
+                            {{ verse }}
+                        </blockquote>
+                    </div>
+                </div>
+                
+                <!-- Related Bible Verses -->
+                {% if verses|length > 1 %}
+                <h2 class="h3 mb-4 mt-5">More Bible Verses on {{ topic }}</h2>
+                <div class="card verse-card mb-3">
+                    <div class="card-body">
+                        <ul class="list-div mb-0">
+                        {% for verse_text in verses %}
+                            {% if verse_text != verse %}
+                            <li class="mb-2">
+                                {{ verse_text }}
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Prayer -->
+                <h2 class="h3 mb-4 mt-5">Prayer Suggestion</h2>
+                <div class="card prayer-card">
+                    <div class="card-body">
+                        <p class="card-text">{{ prayer }}</p>
+                        <button type="button" id="seeAnotherPrayer" class="btn btn-sm btn-outline-info mb-3">
+                            <i class="bi bi-arrow-repeat me-2"></i>See another prayer
+                        </button>
+                        {% if references %}
+                        <div class="small text-muted mt-3">
+                            <i class="bi bi-info-circle-fill me-1"></i> {{ references }}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-4">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="save_prayer" value="true">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle me-2"></i>Add to Prayer Journal
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Return Button -->
+                <div class="text-center mt-4">
+                    <a href="{% url 'prayer_list' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Prayer Journal
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="bg-white py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-0">&copy; {% now "Y" %} Life 'n' Grace. All rights reserved.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0">Made with <i class="bi bi-heart-fill text-danger"></i> and Django</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js" integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO" crossorigin="anonymous"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle "See another prayer" button click
+            const seeAnotherPrayer = document.getElementById('seeAnotherPrayer');
+            
+            if (seeAnotherPrayer) {
+                seeAnotherPrayer.addEventListener('click', function() {
+                    // Get the current topic from the URL or page title
+                    const topic = '{{ topic }}';
+                    
+                    // Show loading state
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
+                    this.disabled = true;
+                    
+                    // Fetch a new prayer for the same topic
+                    fetch(`/prayers/topic_prayer/${encodeURIComponent(topic)}/`, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.prayer) {
+                            // Update the prayer text and references
+                            const prayerCard = document.querySelector('.prayer-card .card-text');
+                            const referencesDiv = document.querySelector('.prayer-card .small.text-muted');
+                            
+                            prayerCard.textContent = data.prayer;
+                            
+                            if (referencesDiv && data.references) {
+                                referencesDiv.innerHTML = `<i class="bi bi-info-circle-fill me-1"></i> ${data.references}`;
+                            }
+                            
+                            // Scroll to the prayer card to make the change obvious
+                            document.querySelector('.prayer-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        
+                        // Reset button state
+                        this.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>See another prayer';
+                        this.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching new prayer:', error);
+                        // Reset button state
+                        this.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>See another prayer';
+                        this.disabled = false;
+                        alert('Error fetching a new prayer. Please try again.');
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
