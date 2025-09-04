@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import os
 import random
+from typing import Optional, Tuple
 
 # Load the API key from environment variables
 # The user will need to set GOOGLE_API_KEY in their environment
@@ -70,7 +71,7 @@ def get_bible_verses_for_topic(topic):
     """
     return PRAYER_TOPICS.get(topic, [])
 
-def get_ai_prayer_suggestion(prompt_text: str, word_count: str = "medium") -> tuple[str | None, str | None]:
+def get_ai_prayer_suggestion(prompt_text: str, word_count: str = "medium") -> Tuple[Optional[str], Optional[str]]:
     """
     Generates a prayer suggestion based on the prompt_text using the Gemini API.
 
@@ -126,7 +127,7 @@ Include appropriate references to Scripture where relevant."""
         print(f"Error generating prayer suggestion via Gemini: {e}")
         return None, f"Error during AI generation: {str(e)}"
 
-def generate_prayer_from_existing(prayer_text: str, word_count: str = "medium") -> tuple[str | None, str | None]:
+def generate_prayer_from_existing(prayer_text: str, word_count: str = "medium") -> Tuple[Optional[str], Optional[str]]:
     """
     Generates a new prayer based on an existing prayer, with optional length specification.
     
@@ -177,7 +178,7 @@ Include appropriate references to Scripture where relevant."""
         print(f"Error generating prayer from existing via Gemini: {e}")
         return None, f"Error during AI generation: {str(e)}"
 
-def get_short_prayer_for_topic(topic: str) -> tuple[str | None, str | None]:
+def get_short_prayer_for_topic(topic: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Generates a short prayer suggestion for a given topic.
     

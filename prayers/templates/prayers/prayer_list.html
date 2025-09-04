@@ -700,7 +700,8 @@
                 document.getElementById('topicPreviewContent').style.display = 'none';
                 
                 // Fetch the preview
-                fetch(`/prayers/topic_preview/${encodeURIComponent(topic)}/`, {
+                const base = window.location.pathname.startsWith('/dev') ? '/dev' : '';
+                fetch(`${base}/prayers/topic_preview/${encodeURIComponent(topic)}/`, {
                     method: 'GET',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'

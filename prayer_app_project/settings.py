@@ -11,6 +11,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from decouple import config
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +24,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-arqhy9qx)m*7b&5o+o@!cb3yer=ojh)@t8!(k&!vd_f18ud5qm"
+# Prefer environment variables or AWS SSM parameter when running on Lambda
+SECRET_KEY = config('SECRET_KEY', default=None)
+if not SECRET_KEY and 'AWS_LAMBDA_FUNCTION_NAME' in os.environ:
+    ssm_param_name = os.getenv('SECRET_KEY_SSM_PARAMETER')
+    if ssm_param_name:
+        try:
+            ssm_region = os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION') or config('AWS_S3_REGION_NAME', default='us-west-1')
+            ssm_client = boto3.client('ssm', region_name=ssm_region)
+            secret_param = ssm_client.get_parameter(Name=ssm_param_name, WithDecryption=True)
+            SECRET_KEY = secret_param['Parameter']['Value']
+        except (BotoCoreError, ClientError, KeyError):
+            pass
+# Fallback for local/dev
+if not SECRET_KEY:
+    SECRET_KEY = "django-insecure-arqhy9qx)m*7b&5o+o@!cb3yer=ojh)@t8!(k&!vd_f18ud5qm"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost', cast=lambda v: [s.strip() for s in v.split(',')])
+
+# Add Lambda-specific host
+if 'AWS_LAMBDA_FUNCTION_NAME' in os.environ:
+    ALLOWED_HOSTS.extend(['*'])
 
 
 # Application definition
@@ -74,10 +96,14 @@ WSGI_APPLICATION = "prayer_app_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# Database: always provide a lightweight SQLite DB for Django internals.
+# Application data can use DynamoDB via the repository layer when USE_DYNAMODB=true.
+running_in_lambda = 'AWS_LAMBDA_FUNCTION_NAME' in os.environ
+sqlite_path = '/tmp/db.sqlite3' if running_in_lambda else (BASE_DIR / 'db.sqlite3')
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': sqlite_path,
     }
 }
 
@@ -117,8 +143,54 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# AWS S3 Settings for static files in production
+if 'AWS_LAMBDA_FUNCTION_NAME' in os.environ:
+    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
+    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
+    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-west-1')
+    # Only enable S3 static hosting if a bucket is configured
+    if AWS_STORAGE_BUCKET_NAME:
+        AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+        AWS_DEFAULT_ACL = None
+        AWS_S3_OBJECT_PARAMETERS = {
+            'CacheControl': 'max-age=86400',
+        }
+        # Static files
+        STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+        STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Logging configuration for Lambda
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
+
+# Respect API Gateway stage prefix (e.g., /dev) if provided
+FORCE_SCRIPT_NAME = os.getenv('DJANGO_FORCE_SCRIPT_NAME') or None
+if FORCE_SCRIPT_NAME:
+    # Ensure Django builds absolute URLs correctly behind API Gateway/CloudFront
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

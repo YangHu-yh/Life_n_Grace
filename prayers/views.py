@@ -3,6 +3,7 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Prayer
+from .repository import get_repository
 from .forms import PrayerForm, AIPrayerPromptForm
 from .gemini_client import (
     get_ai_prayer_suggestion, 
@@ -16,7 +17,8 @@ from .gemini_client import (
 import random
 
 def prayer_list_view(request):
-    prayers = Prayer.objects.all().order_by('-created_at')
+    repo = get_repository()
+    prayers = repo.list_prayers()
     
     # For storing any generated prayer that hasn't been saved yet
     generated_prayer = None
@@ -37,10 +39,14 @@ def prayer_list_view(request):
     return render(request, 'prayers/prayer_list.html', context)
 
 def add_prayer_view(request):
+    repo = get_repository()
     if request.method == 'POST':
         form = PrayerForm(request.POST)
         if form.is_valid():
-            form.save()
+            repo.create_prayer(
+                text=form.cleaned_data['text'],
+                status=form.cleaned_data.get('status', 'new')
+            )
             return redirect('prayer_list')
     # This view will primarily be part of the prayer_list_view page, 
     # but a separate POST handler is good practice.
@@ -86,30 +92,28 @@ def suggest_ai_prayer_view(request):
 
 @require_POST
 def delete_prayer_view(request, prayer_id):
-    prayer = get_object_or_404(Prayer, id=prayer_id)
-    prayer.delete()
+    repo = get_repository()
+    repo.delete_prayer(str(prayer_id))
     # Optionally, add a success message using Django's messages framework here
     # messages.success(request, 'Prayer deleted successfully!')
     return redirect('prayer_list')
 
 @require_POST
 def mark_as_prayed_over_view(request, prayer_id):
-    prayer = get_object_or_404(Prayer, id=prayer_id)
-    prayer.clicked_as_prayed_over_count += 1
-    prayer.save(update_fields=['clicked_as_prayed_over_count']) # Efficiently update only this field
+    repo = get_repository()
+    repo.increment_prayed_over(str(prayer_id))
     # Optionally, add a success message
     # messages.success(request, f'Marked "{prayer.text[:30]}..." as prayed over.')
     return redirect('prayer_list')
 
 @require_POST
 def update_prayer_status_view(request, prayer_id):
-    prayer = get_object_or_404(Prayer, id=prayer_id)
+    repo = get_repository()
     new_status = request.POST.get('status')
     
     # Validate the new status
     if new_status in dict(Prayer.PRAYER_STATUS_CHOICES).keys():
-        prayer.status = new_status
-        prayer.save(update_fields=['status'])
+        repo.update_status(str(prayer_id), new_status)
         # Optionally, add a success message
         # messages.success(request, f'Updated prayer status to "{prayer.get_status_display()}"')
     
@@ -118,6 +122,8 @@ def update_prayer_status_view(request, prayer_id):
 @require_POST
 def generate_from_existing_view(request, prayer_id, length='medium'):
     """Generate a new prayer based on an existing one"""
+    # For DynamoDB mode, we read text directly via ORM for source text
+    # since generate_from_existing creates a new entry via repo
     prayer = get_object_or_404(Prayer, id=prayer_id)
     
     # Validate length parameter
@@ -128,11 +134,12 @@ def generate_from_existing_view(request, prayer_id, length='medium'):
     
     if suggested_text:
         # Create a new prayer based on the generated text
-        Prayer.objects.create(
-            text=suggested_text, 
-            is_ai_generated=True, 
+        repo = get_repository()
+        repo.create_prayer(
+            text=suggested_text,
+            is_ai_generated=True,
             ai_generation_references=references,
-            status='new' 
+            status='new'
         )
     
     return redirect('prayer_list')
@@ -161,12 +168,31 @@ def topic_prayer_preview(request, topic=None):
     # Get verses for this topic and select one
     verses = get_bible_verses_for_topic(topic)
     selected_verse = random.choice(verses) if verses else ""
-    
-    # Instead of using get_short_prayer_for_topic which selects its own verse,
-    # we'll directly call the Gemini API with our selected verse to keep consistency
-    
-    if not model or topic not in PRAYER_TOPICS:
-        return JsonResponse({'error': 'Topic not recognized or API not available'}, status=500)
+
+    # If the AI model isn't configured, provide a graceful local fallback
+    script_name = request.META.get('SCRIPT_NAME', '')
+    if topic not in PRAYER_TOPICS:
+        return JsonResponse({'error': 'Topic not found'}, status=404)
+    if not model:
+        base = f"a short prayer for '{topic}'"
+        verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
+        prayer_text = (
+            f"Heavenly Father, we seek your presence in this time. Grant us {topic.lower()} "
+            f"and help us to trust in your unfailing love. Guide our hearts and minds, and "
+            f"fill us with peace and courage today. Amen."
+        )
+        references = (
+            f"Sample prayer for '{topic}' based on {verse_ref}"
+            if verse_ref else f"Sample prayer for '{topic}'"
+        )
+        return JsonResponse({
+            'success': True,
+            'topic': topic,
+            'verse': selected_verse,
+            'prayer': prayer_text,
+            'references': references,
+            'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
+        })
     
     try:
         # Use the already selected verse for the prayer generation
@@ -190,7 +216,24 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
     
     except Exception as e:
         print(f"Error generating topic prayer: {e}")
-        return JsonResponse({'error': f'Error generating prayer: {str(e)}'}, status=500)
+        # Fallback on any generation error as well
+        verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
+        prayer_text = (
+            f"Lord, in this moment we ask for your help with {topic.lower()}. "
+            f"Strengthen us and steady our hearts. Amen."
+        )
+        references = (
+            f"Fallback prayer for '{topic}' based on {verse_ref}"
+            if verse_ref else f"Fallback prayer for '{topic}'"
+        )
+        return JsonResponse({
+            'success': True,
+            'topic': topic,
+            'verse': selected_verse,
+            'prayer': prayer_text,
+            'references': references,
+            'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
+        })
     
     # Return JSON response with the preview data
     return JsonResponse({
@@ -199,7 +242,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
         'verse': selected_verse,
         'prayer': prayer_text,
         'references': references,
-        'topic_url': f'/prayers/topic_prayer/{topic}/'
+        'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
     })
 
 def topic_prayer_view(request, topic):

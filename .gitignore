@@ -73,6 +73,9 @@ db.sqlite3-journal
 media/
 staticfiles/
 
+# Zappa generated CloudFormation templates
+prayer-app-*-template-*.json
+
 # Virtual Environment
 venv/
 env/

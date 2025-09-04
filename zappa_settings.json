@@ -1,0 +1,67 @@
+{
+    "dev": {
+        "aws_region": "us-west-1",
+        "django_settings": "prayer_app_project.settings",
+        "profile_name": "default",
+        "project_name": "prayer-app",
+        "runtime": "python3.9",
+        "s3_bucket": "life-n-grace-prayer-app-dev",
+        "memory_size": 512,
+        "timeout_seconds": 30,
+        "manage_roles": false,
+        "role_arn": "arn:aws:iam::227457565723:role/prayer-app-dev-ZappaLambdaExecutionRole",
+        "environment_variables": {
+            "DEBUG": "True",
+            "ALLOWED_HOSTS": "*",
+            "AWS_REGION": "us-west-1",
+            "SECRET_KEY_SSM_PARAMETER": "/prayer-app/dev/SECRET_KEY",
+            "USE_DYNAMODB": "true",
+            "DDB_TABLE_NAME": "prayer-app-prayers-dev",
+            "DJANGO_FORCE_SCRIPT_NAME": "/dev"
+        },
+        "exclude": [
+            "*.gz",
+            "*.rar",
+            "*.zip",
+            "*.tar.gz",
+            "__pycache__",
+            "*.pyc",
+            ".git/*",
+            "venv/*",
+            "node_modules/*",
+            "boto3",
+            "botocore"
+        ]
+    },
+    "production": {
+        "aws_region": "us-west-1",
+        "django_settings": "prayer_app_project.settings",
+        "profile_name": "default",
+        "project_name": "prayer-app",
+        "runtime": "python3.9",
+        "s3_bucket": "zappa-prayer-app-prod",
+        "memory_size": 1024,
+        "timeout_seconds": 30,
+        "environment_variables": {
+            "DEBUG": "False",
+            "ALLOWED_HOSTS": "yourdomain.com,www.yourdomain.com",
+            "AWS_REGION": "us-west-1",
+            "SECRET_KEY_SSM_PARAMETER": "/prayer-app/prod/SECRET_KEY",
+            "USE_DYNAMODB": "true",
+            "DDB_TABLE_NAME": "prayer-app-prayers"
+        },
+        "exclude": [
+            "*.gz",
+            "*.rar",
+            "*.zip",
+            "*.tar.gz",
+            "__pycache__",
+            "*.pyc",
+            ".git/*",
+            "venv/*",
+            "node_modules/*",
+            "boto3",
+            "botocore"
+        ]
+    }
+} 
