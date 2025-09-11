@@ -32,14 +32,15 @@ These instructions assume you have the project files in a directory named `life_
     ```
 
 4.  **Set Environment Variables**:
-    This application uses the Google Gemini API for AI prayer suggestions. You need to set your API key as an environment variable.
-    In your terminal (for the current session):
+    This application now uses the Apologist Fusion Chat Completions API for AI prayer suggestions. Set the following environment variables:
     ```bash
-    export GOOGLE_API_KEY="YOUR_API_KEY_HERE"
+    export APOLOGIST_API_KEY="YOUR_API_KEY_HERE"
+    export APOLOGIST_API_URL="https://your-agent-domain/api/v1"  # e.g., https://my.gospel.bot/api/v1
+    export APOLOGIST_MODEL_ID="openai/gpt/4o"                    # optional; defaults to openai/gpt/4o
+    export APOLOGIST_TRANSLATION="esv"                           # optional; esv, niv, kjv, etc.
     ```
-    Replace `"YOUR_API_KEY_HERE"` with your actual Google API key. 
-    *   For persistent storage across terminal sessions, consider adding this line to your shell's configuration file (e.g., `~/.zshrc`, `~/.bashrc`, or `~/.profile`) and then sourcing the file (e.g., `source ~/.zshrc`) or opening a new terminal.
-    *   Alternatively, you can use a `.env` file by creating a file named `.env` in the `life_n_grace` directory with the line `GOOGLE_API_KEY="YOUR_API_KEY_HERE"` and modifying `prayers/gemini_client.py` to load it using a library like `python-dotenv` (this would require adding `python-dotenv` to `requirements.txt` and updating the client code).
+    *   For persistent storage across terminal sessions, add these lines to your shell configuration file (e.g., `~/.zshrc`, `~/.bashrc`, or `~/.profile`) and then source the file (e.g., `source ~/.zshrc`) or open a new terminal.
+    *   The API is OpenAI-compatible; for details see the Apologist docs: https://apologistproject.org/documentation/apologist-fusion/chat-completion
 
 5.  **Apply Database Migrations**:
     This will set up your database schema. Ensure you are in the `life_n_grace` directory where `manage.py` is located.
@@ -72,6 +73,6 @@ These instructions assume you have the project files in a directory named `life_
         *   `forms.py`: Defines forms for user input (e.g., adding a prayer).
         *   `templates/prayers/`: Contains HTML templates specific to the prayers app.
         *   `urls.py` (inside `prayers/`): URL routing specific to the prayers app.
-        *   `gemini_client.py`: Module for interacting with the Google Gemini API.
+        *   `apologist_client.py`: API client module for Apologist Fusion.
         *   `migrations/`: Stores database migration files.
     *   `venv/` (if created): Directory for the Python virtual environment. 

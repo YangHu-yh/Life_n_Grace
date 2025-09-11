@@ -5,7 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import Prayer
 from .repository import get_repository
 from .forms import PrayerForm, AIPrayerPromptForm
-from .gemini_client import (
+from .apologist_client import (
     get_ai_prayer_suggestion, 
     generate_prayer_from_existing, 
     get_prayer_topics, 
