@@ -1,17 +1,25 @@
 import os
 import random
+import logging
 from typing import Optional, Tuple
 import requests
 import re
 from urllib.parse import urlparse, urlunparse
 
+logger = logging.getLogger(__name__)
+
 # Apologist Fusion configuration from environment
-APOLOGIST_API_KEY = os.getenv("APOLOGIST_API_KEY")
-# Default to the dev Agent domain if not provided via env
-APOLOGIST_API_URL = os.getenv("APOLOGIST_API_URL", "https://life-n-grace-dev.apologetics.bot/api/v1")
-APOLOGIST_MODEL_ID = os.getenv("APOLOGIST_MODEL_ID", "")
-APOLOGIST_TRANSLATION = os.getenv("APOLOGIST_TRANSLATION", "esv")
-APOLOGIST_CHAT_COMPLETIONS_URL = os.getenv("APOLOGIST_CHAT_COMPLETIONS_URL")
+def _read_env():
+    return {
+        'API_KEY': os.getenv("APOLOGIST_API_KEY"),
+        'API_URL': os.getenv("APOLOGIST_API_URL", "https://life-n-grace-dev.apologetics.bot/api/v1"),
+        'MODEL_ID': os.getenv("APOLOGIST_MODEL_ID", ""),
+        'TRANSLATION': os.getenv("APOLOGIST_TRANSLATION", "esv"),
+        'CHAT_COMPLETIONS_URL': os.getenv("APOLOGIST_CHAT_COMPLETIONS_URL"),
+        'DEBUG': os.getenv("APOLOGIST_DEBUG", "false").lower() == "true",
+        'TIMEOUT': float(os.getenv("APOLOGIST_TIMEOUT", "30")),
+        'STRICT_OPENAI': os.getenv("APOLOGIST_STRICT_OPENAI", "false").lower() == "true",
+    }
 
 
 class _ApologistResponsePart:
@@ -30,7 +38,7 @@ class _ApologistResponse:
 
 
 class ApologistModel:
-    def __init__(self, base_url: str, api_key: str, model_id: str):
+    def __init__(self, base_url: str, api_key: str, model_id: str, timeout_sec: float = 30.0, debug: bool = False, strict_openai: bool = False, chat_completions_url: Optional[str] = None):
         # Normalize base URL: add https:// if missing, strip trailing slash
         normalized = (base_url or "").strip()
         if normalized and not normalized.lower().startswith(("http://", "https://")):
@@ -55,9 +63,12 @@ class ApologistModel:
         self.base_url = normalized.rstrip("/")
         self.api_key = api_key
         self.model_id = model_id
+        self.timeout_sec = timeout_sec
+        self.debug = debug
+        self.strict_openai = strict_openai
         # Allow explicit endpoint override; otherwise, append path if needed
-        if APOLOGIST_CHAT_COMPLETIONS_URL:
-            endpoint = APOLOGIST_CHAT_COMPLETIONS_URL.strip()
+        if chat_completions_url:
+            endpoint = chat_completions_url.strip()
             if endpoint and not endpoint.lower().startswith(("http://", "https://")):
                 endpoint = "https://" + endpoint
             # Correct language-prefixed paths like /en/chat/completions to /api/v1/chat/completions
@@ -113,44 +124,87 @@ class ApologistModel:
         return ""
 
     def generate_content(self, prompt_text: str) -> _ApologistResponse:
-        payload = {
-            "messages": [
-                {"role": "user", "content": prompt_text}
-            ],
+        # Build OpenAI-style payload
+        base_payload = {
+            "messages": [{"role": "user", "content": prompt_text}],
             "stream": False,
-            "response_format": {"type": "json"},
-            "metadata": {
-                "anonymous": True,
-                "translation": APOLOGIST_TRANSLATION,
-            },
         }
+        if not self.strict_openai:
+            # Include optional fields when not in strict mode
+            base_payload["response_format"] = {"type": "json"}
+            base_payload["metadata"] = {"anonymous": True}
         if self.model_id:
-            payload["model"] = self.model_id
-        try:
-            resp = self.session.post(self.endpoint, json=payload, timeout=30)
-            resp.raise_for_status()
-            text_out = ""
+            base_payload["model"] = self.model_id
+
+        # Try request, with a fallback if the server rejects optional fields
+        attempts = [base_payload]
+        if not self.strict_openai:
+            fallback = {k: v for k, v in base_payload.items() if k not in ("response_format", "metadata")}
+            attempts.append(fallback)
+
+        last_error = None
+        for idx, payload in enumerate(attempts, start=1):
             try:
-                data = resp.json()
-                text_out = self._extract_text(data)
-            except ValueError:
-                text_out = resp.text or ""
-            return _ApologistResponse(text_out)
-        except Exception as e:
-            print(f"Error calling Apologist API: {e}")
-            try:
-                if 'resp' in locals() and resp is not None and resp.status_code in (401, 403):
-                    print("Hint: 401/403 usually means the API key doesn't match this Agent domain or the model is not permitted. Try omitting the model to use the Agent default.")
-            except Exception:
-                pass
-            return _ApologistResponse("")
+                if self.debug:
+                    logger.info("Apologist request attempt=%d endpoint=%s has_model=%s payload_keys=%s", idx, self.endpoint, bool(self.model_id), list(payload.keys()))
+                resp = self.session.post(self.endpoint, json=payload, timeout=self.timeout_sec)
+                if self.debug:
+                    logger.info("Apologist response attempt=%d status=%s", idx, resp.status_code)
+                resp.raise_for_status()
+                text_out = ""
+                try:
+                    data = resp.json()
+                    if self.debug:
+                        logger.debug("Apologist JSON keys: %s", list(data.keys()))
+                    text_out = self._extract_text(data)
+                except ValueError:
+                    text_out = resp.text or ""
+                if not text_out and self.debug:
+                    logger.warning("Apologist empty text response; returning raw text length=%d", len(resp.text or ""))
+                return _ApologistResponse(text_out)
+            except Exception as e:
+                last_error = e
+                try:
+                    if self.debug and 'resp' in locals() and resp is not None:
+                        logger.warning("Apologist error status=%s body=%s", getattr(resp, 'status_code', None), resp.text[:500] if resp.text else "")
+                    if 'resp' in locals() and resp is not None and resp.status_code in (401, 403):
+                        logger.error("Apologist auth/model error (401/403). Check API key domain permissions and model access.")
+                except Exception:
+                    logger.exception("Error while logging Apologist failure context")
+                # Retry next attempt if available
+                continue
+        logger.exception("Apologist request failed after %d attempts", len(attempts))
+        return _ApologistResponse("")
 
 
-# Initialize model if env vars present; else keep None for caller fallbacks
-if APOLOGIST_API_KEY and APOLOGIST_API_URL:
-    model = ApologistModel(APOLOGIST_API_URL, APOLOGIST_API_KEY, APOLOGIST_MODEL_ID)
-else:
-    model = None
+_MODEL_CACHE = {
+    'model': None,
+    'env': None,
+}
+
+def get_model() -> Optional[ApologistModel]:
+    env = _read_env()
+    cached_env = _MODEL_CACHE['env']
+    if _MODEL_CACHE['model'] is not None and cached_env == env:
+        return _MODEL_CACHE['model']
+    api_key = env['API_KEY']
+    api_url = env['API_URL']
+    if not api_key or not api_url:
+        _MODEL_CACHE['model'] = None
+        _MODEL_CACHE['env'] = env
+        return None
+    model = ApologistModel(
+        base_url=api_url,
+        api_key=api_key,
+        model_id=env['MODEL_ID'],
+        timeout_sec=env['TIMEOUT'],
+        debug=env['DEBUG'],
+        strict_openai=env['STRICT_OPENAI'],
+        chat_completions_url=env['CHAT_COMPLETIONS_URL'],
+    )
+    _MODEL_CACHE['model'] = model
+    _MODEL_CACHE['env'] = env
+    return model
 
 
 # Common prayer topics with associated Bible verses
@@ -220,8 +274,9 @@ def get_ai_prayer_suggestion(prompt_text: str, word_count: str = "medium") -> Tu
         Returns (None, "API Key not configured or model not initialized.") if the API is not available.
         Returns (None, "Error message") if generation fails.
     """
+    model = get_model()
     if not model:
-        print("AI API key not configured or model not initialized.")
+        logger.warning("Apologist model not initialized (missing API URL or key)")
         return None, "AI API key not configured or model not initialized."
 
     try:
@@ -251,8 +306,9 @@ def generate_prayer_from_existing(prayer_text: str, word_count: str = "medium") 
     """
     Generates a new prayer based on an existing prayer, with optional length specification.
     """
+    model = get_model()
     if not model:
-        print("AI API key not configured or model not initialized.")
+        logger.warning("Apologist model not initialized (missing API URL or key)")
         return None, "AI API key not configured or model not initialized."
     try:
         count_ranges = {
@@ -285,6 +341,7 @@ def get_short_prayer_for_topic(topic: str) -> Tuple[Optional[str], Optional[str]
     """
     Generates a short prayer suggestion for a given topic.
     """
+    model = get_model()
     if not model or topic not in PRAYER_TOPICS:
         return None, "Topic not recognized or API not available."
     try:

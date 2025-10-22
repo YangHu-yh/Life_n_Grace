@@ -15,6 +15,7 @@ import os
 from decouple import config
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from django.urls import reverse_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +60,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
     "prayers",
 ]
 
@@ -68,6 +73,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Place graceful middleware AFTER auth so it can override request.user on DB errors
+    "prayer_app_project.middleware.GracefulAuthMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -77,7 +85,10 @@ ROOT_URLCONF = "prayer_app_project.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [
+            BASE_DIR / "templates",
+            BASE_DIR / "prayer_app_project" / "templates",
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -96,8 +107,9 @@ WSGI_APPLICATION = "prayer_app_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# Database: always provide a lightweight SQLite DB for Django internals.
-# Application data can use DynamoDB via the repository layer when USE_DYNAMODB=true.
+# Database
+# Default to SQLite (local dev or Lambda cold start fallback),
+# but use Postgres automatically when DB_* env vars are set.
 running_in_lambda = 'AWS_LAMBDA_FUNCTION_NAME' in os.environ
 sqlite_path = '/tmp/db.sqlite3' if running_in_lambda else (BASE_DIR / 'db.sqlite3')
 DATABASES = {
@@ -106,6 +118,27 @@ DATABASES = {
         'NAME': sqlite_path,
     }
 }
+
+# Optional: switch to Postgres if configured
+DB_NAME = config('DB_NAME', default=None)
+DB_USER = config('DB_USER', default=None)
+DB_PASSWORD = config('DB_PASSWORD', default=None)
+DB_HOST = config('DB_HOST', default=None)
+DB_PORT = config('DB_PORT', default='5432')
+
+if DB_HOST and DB_NAME and DB_USER:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASSWORD or '',
+        'HOST': DB_HOST,
+        'PORT': DB_PORT,
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+            'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
+        },
+    }
 
 
 # Password validation
@@ -125,6 +158,14 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+# On AWS Lambda, the bundled common-passwords wordlist may be unavailable under slim handler.
+# Disable the CommonPasswordValidator in that environment to avoid FileNotFoundError.
+if running_in_lambda:
+    AUTH_PASSWORD_VALIDATORS = [
+        v for v in AUTH_PASSWORD_VALIDATORS
+        if v.get("NAME") != "django.contrib.auth.password_validation.CommonPasswordValidator"
+    ]
 
 
 # Internationalization
@@ -147,6 +188,11 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # AWS S3 Settings for static files in production
 if 'AWS_LAMBDA_FUNCTION_NAME' in os.environ:
+    # Use cookie-based sessions on Lambda to avoid DB dependency by default
+    SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
     AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
     AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
     AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='')
@@ -162,25 +208,103 @@ if 'AWS_LAMBDA_FUNCTION_NAME' in os.environ:
         STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
         STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
 
+# Optional: Redis cache/session if provided
+REDIS_URL = config('REDIS_URL', default=None)
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'TIMEOUT': None,
+        }
+    }
+    # Prefer cache-backed sessions when Redis is available
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+
+# Minimal allauth templates rendering speed: disable account email flows
+ACCOUNT_FORMS = {}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Authentication (django-allauth)
+SITE_ID = 1
+AUTHENTICATION_BACKENDS = (
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+)
+LOGIN_REDIRECT_URL = reverse_lazy("prayer_list")
+LOGOUT_REDIRECT_URL = reverse_lazy("home")
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_EMAIL_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"
+ACCOUNT_LOGOUT_ON_GET = False
+ACCOUNT_LOGIN_ON_SIGNUP = False
+ACCOUNT_SIGNUP_REDIRECT_URL = reverse_lazy("account_login")
+
+# Google OAuth credentials (provided via env/Zappa). Only enable the provider when configured
+GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
+GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET", default="")
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    INSTALLED_APPS.append("allauth.socialaccount.providers.google")
+    SOCIALACCOUNT_PROVIDERS = {
+        "google": {
+            "APP": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "secret": GOOGLE_CLIENT_SECRET,
+                "key": "",
+            },
+            "SCOPE": ["email", "profile"],
+            "AUTH_PARAMS": {"access_type": "online"},
+        }
+    }
+else:
+    SOCIALACCOUNT_PROVIDERS = {}
+
+# Optional: custom allauth adapter hook (will be set if provided)
+ACCOUNT_ADAPTER = config('ACCOUNT_ADAPTER', default='prayer_app_project.adapters.ThrottledAccountAdapter')
 
 # Logging configuration for Lambda
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
+        'json': {
+            'format': '{"level":"%(levelname)s","ts":"%(asctime)s","logger":"%(name)s","module":"%(module)s","func":"%(funcName)s","lineno":%(lineno)d,"message":"%(message)s"}',
+            'datefmt': '%Y-%m-%dT%H:%M:%S%z',
+        },
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'format': '{levelname} {asctime} {name} {module}:{lineno} {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'prayers': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
     'root': {

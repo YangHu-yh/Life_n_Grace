@@ -69,9 +69,15 @@ __pycache__/
 *.log
 local_settings.py
 db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+staticfiles/**
 db.sqlite3-journal
 media/
 staticfiles/
+*.tar.gz
+package/
+package-*/
 
 # Zappa generated CloudFormation templates
 prayer-app-*-template-*.json

@@ -52,7 +52,7 @@
     <!-- Navigation Bar -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white">
         <div class="container">
-            <a class="navbar-brand" href="{% url 'prayer_list' %}">
+            <a class="navbar-brand" href="{% url 'home' %}">
                 <span class="fw-bold text-primary">Life 'n' Grace</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -60,12 +60,10 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'prayer_list' %}">Prayer Journal</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">About</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'prayer_list' %}">Prayers</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'profile' %}">Profile</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'account_logout' %}">Logout</a></li>
                 </ul>
             </div>
         </div>
@@ -177,7 +175,8 @@
                     this.disabled = true;
                     
                     // Fetch a new prayer for the same topic
-                    fetch(`/prayers/topic_prayer/${encodeURIComponent(topic)}/`, {
+                    const base = window.location.pathname.startsWith('/dev') ? '/dev' : '';
+                    fetch(`${base}/prayers/topic_prayer/${encodeURIComponent(topic)}/`, {
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest'
                         }

@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover
     BotoCoreError = ClientError = Exception  # type: ignore
 
 from .models import Prayer as PrayerModel
+from .models import DailyGenerationQuota
 
 
 @dataclass
@@ -103,6 +104,17 @@ class ORMRepository(BaseRepository):
             PrayerModel.objects.get(id=prayer_id).delete()
         except PrayerModel.DoesNotExist:
             pass
+
+    # Quota helpers for ORM mode
+    def increment_daily_quota(self, user_id: int, for_date) -> int:
+        obj, _ = DailyGenerationQuota.objects.get_or_create(user_id=user_id, date=for_date)
+        obj.count += 1
+        obj.save(update_fields=['count'])
+        return obj.count
+
+    def get_daily_quota(self, user_id: int, for_date) -> int:
+        obj = DailyGenerationQuota.objects.filter(user_id=user_id, date=for_date).first()
+        return obj.count if obj else 0
 
     def increment_prayed_over(self, prayer_id: str) -> None:
         try:
@@ -202,6 +214,14 @@ class DynamoDBRepository(BaseRepository):
                 ':now': datetime.now(timezone.utc).isoformat(),
             }
         )
+
+    # Quota helpers for DynamoDB mode: no-op for now (keeps Lambda package small).
+    # You can later add a dedicated table or reuse existing table with a composite key.
+    def increment_daily_quota(self, user_id: int, for_date) -> int:
+        return 0
+
+    def get_daily_quota(self, user_id: int, for_date) -> int:
+        return 0
 
 
 def get_repository() -> BaseRepository:

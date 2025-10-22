@@ -31,6 +31,11 @@ These instructions assume you have the project files in a directory named `life_
     pip install -r requirements.txt
     ```
 
+4.  **Minimal App Pages**:
+    - Home: brief intro and CTA buttons.
+    - Auth: `/accounts/login/` and `/accounts/signup/` powered by django-allauth with Google.
+    - Profile: `/profile/` shows basic user info.
+
 4.  **Set Environment Variables**:
     This application now uses the Apologist Fusion Chat Completions API for AI prayer suggestions. Set the following environment variables:
     ```bash
@@ -54,8 +59,23 @@ These instructions assume you have the project files in a directory named `life_
     ```
 
 7.  **Access the Application**:
-    Open your web browser and go to:
-    `http://127.0.0.1:8000/prayers/`
+    - Home: `http://127.0.0.1:8000/`
+    - Login/Signup: `http://127.0.0.1:8000/accounts/login/` (Google button provided)
+    - After login you will be redirected to: `http://127.0.0.1:8000/prayers/`
+
+## Google Sign-In (django-allauth)
+
+Configure Google OAuth credentials:
+
+1. Create a Google OAuth 2.0 Client (Web) in Google Cloud Console and set Authorized redirect URI to:
+   - `http://127.0.0.1:8000/accounts/google/login/callback/`
+   - For Zappa dev: `https://<your-api-domain>/dev/accounts/google/login/callback/`
+2. Export credentials locally (or set in Zappa envs):
+   ```bash
+   export GOOGLE_CLIENT_ID="your-client-id"
+   export GOOGLE_CLIENT_SECRET="your-client-secret"
+   ```
+3. Start the server and visit `/accounts/login/`.
 
 ## Project Structure Overview
 
@@ -63,10 +83,11 @@ These instructions assume you have the project files in a directory named `life_
     *   `manage.py`: Django's command-line utility for interacting with your project.
     *   `requirements.txt`: A list of Python packages required for the project.
     *   `db.sqlite3`: The SQLite database file (default for development).
-    *   `prayer_app_project/`: The Django **project** configuration directory.
+*   `prayer_app_project/`: The Django **project** configuration directory.
         *   `settings.py`: Core project settings (database, installed apps, static files, etc.).
         *   `urls.py`: Main URL routing for the entire project.
         *   `wsgi.py`, `asgi.py`: Entry points for web servers.
+    *   `templates/`: Project-level templates like `home.html` and `profile.html`.
     *   `prayers/`: A Django **app** dedicated to handling prayer-related features.
         *   `models.py`: Defines the database tables/schema for prayers.
         *   `views.py`: Contains the logic for handling web requests and returning responses.

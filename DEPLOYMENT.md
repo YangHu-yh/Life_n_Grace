@@ -9,6 +9,33 @@ This guide will help you deploy your Django Prayer App to AWS Lambda using Zappa
 3. **Python 3.9**: Ensure you're using Python 3.9 (Lambda runtime)
 4. **Virtual Environment**: Always use a virtual environment
 
+## Quickstart
+
+```bash
+# 1) Configure AWS (one-time)
+aws configure
+
+# 2) Bootstrap locally (creates venv, installs, migrates, collects static, cleans caches)
+python deploy.py bootstrap
+
+# 3) Run locally
+venv/bin/python manage.py runserver
+
+# 4) Deploy (choose one)
+python deploy.py dev
+# or
+python deploy.py prod
+```
+
+Common maintenance:
+```bash
+# Clean Python caches and pip caches
+python deploy.py clean
+
+# Make and apply migrations locally
+python deploy.py migrate
+```
+
 ## Step-by-Step Deployment
 
 ### 1. AWS Setup
@@ -28,15 +55,17 @@ You'll need:
 ### 2. Environment Setup
 
 ```bash
-# Activate your virtual environment
-source venv/bin/activate
+# Option A: one-shot bootstrap
+python deploy.py bootstrap
 
-# Install dependencies
+# Option B: manual steps
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+python manage.py migrate
+python manage.py collectstatic --noinput
 
-# Create your environment file
-cp .env.example .env
-# Edit .env with your actual values
+# Optional: create a local .env and export env vars
+# Include GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET for Google login
 ```
 
 ### 3. Local Testing
@@ -44,11 +73,8 @@ cp .env.example .env
 Before deploying, test locally:
 
 ```bash
-# Run setup
-python deploy.py setup
-
 # Start development server
-python manage.py runserver
+venv/bin/python manage.py runserver
 ```
 
 ### 4. Configure Zappa Settings
@@ -133,6 +159,12 @@ Never store sensitive data in your code. Use:
 - AWS Systems Manager Parameter Store
 - AWS Secrets Manager
 
+Required for Google Login (django-allauth):
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+Make sure `zappa_settings.json` has these under `environment_variables` for each stage.
+
 ### CORS Configuration
 If you need CORS support, add to your Django settings:
 ```python
@@ -155,7 +187,7 @@ zappa update dev
 zappa status dev
 
 # View logs
-zappa tail dev
+zappa update dev
 
 # Run Django management commands
 zappa manage dev migrate
@@ -164,6 +196,23 @@ zappa manage dev collectstatic
 
 # Undeploy (delete everything)
 zappa undeploy dev
+```
+
+## Consolidated Commands (deploy.py)
+
+```bash
+# Bootstrap: create venv, install, migrate, collectstatic, clean caches
+python deploy.py bootstrap
+
+# Clean up caches (pycache, *.pyc, pip caches)
+python deploy.py clean
+
+# Update local migrations (makemigrations + migrate)
+python deploy.py migrate
+
+# Deploy to Lambda via Zappa (dev/prod)
+python deploy.py dev
+python deploy.py prod
 ```
 
 ## Troubleshooting

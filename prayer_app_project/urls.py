@@ -17,8 +17,28 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView, TemplateView
+from django.templatetags.static import static
+from django.contrib.auth.decorators import login_required
 
 urlpatterns = [
+    # Home page
+    path("", TemplateView.as_view(template_name="home.html"), name="home"),
+    # Profile page (login required)
+    path("profile/", login_required(TemplateView.as_view(template_name="profile.html")), name="profile"),
+
+    # Auth (django-allauth)
+    path("accounts/", include("allauth.urls")),
+
+    # Admin
     path("admin/", admin.site.urls),
+
+    # App routes (require login)
     path("prayers/", include("prayers.urls")),
+
+    # Favicon for dev
+    path(
+        "favicon.ico",
+        RedirectView.as_view(url=static("admin/img/icon-yes.svg"), permanent=False),
+    ),
 ]

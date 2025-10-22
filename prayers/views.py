@@ -2,20 +2,26 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
 from .models import Prayer
 from .repository import get_repository
 from .forms import PrayerForm, AIPrayerPromptForm
 from .apologist_client import (
-    get_ai_prayer_suggestion, 
-    generate_prayer_from_existing, 
-    get_prayer_topics, 
+    get_ai_prayer_suggestion,
+    generate_prayer_from_existing,
+    get_prayer_topics,
     get_bible_verses_for_topic,
     get_short_prayer_for_topic,
-    model,
-    PRAYER_TOPICS
+    get_model,
+    PRAYER_TOPICS,
 )
 import random
+import logging
 
+logger = logging.getLogger(__name__)
+
+@login_required
 def prayer_list_view(request):
     repo = get_repository()
     prayers = repo.list_prayers()
@@ -38,6 +44,7 @@ def prayer_list_view(request):
     }
     return render(request, 'prayers/prayer_list.html', context)
 
+@login_required
 def add_prayer_view(request):
     repo = get_repository()
     if request.method == 'POST':
@@ -53,8 +60,21 @@ def add_prayer_view(request):
     # If form is invalid or it's a GET, redirect to list view which displays forms.
     return redirect('prayer_list')
 
+@login_required
 def suggest_ai_prayer_view(request):
     if request.method == 'POST':
+        # Enforce per-user daily quota before any API call
+        today = timezone.now().date()
+        repo = get_repository()
+        used = 0
+        try:
+            used = repo.get_daily_quota(request.user.id, today)
+        except Exception:
+            used = 0
+        if used >= 10:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': 'Daily AI generation quota reached.'}, status=429)
+            return redirect('prayer_list')
         ai_form = AIPrayerPromptForm(request.POST)
         if ai_form.is_valid():
             prompt = ai_form.cleaned_data['prompt']
@@ -62,6 +82,10 @@ def suggest_ai_prayer_view(request):
             suggested_text, references = get_ai_prayer_suggestion(prompt, word_count)
             
             if suggested_text:
+                try:
+                    repo.increment_daily_quota(request.user.id, today)
+                except Exception:
+                    pass
                 # Check if this is an AJAX request
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return JsonResponse({
@@ -82,7 +106,7 @@ def suggest_ai_prayer_view(request):
                         'error': references
                     })
                 else:
-                    print(f"AI suggestion failed. Reference/Error: {references}")
+                    logger.error("AI suggestion failed. detail=%s", references)
                     return redirect('prayer_list')
     
     # If we get here, it's either not a POST request or the form is invalid
@@ -91,6 +115,7 @@ def suggest_ai_prayer_view(request):
     return redirect('prayer_list')
 
 @require_POST
+@login_required
 def delete_prayer_view(request, prayer_id):
     repo = get_repository()
     repo.delete_prayer(str(prayer_id))
@@ -99,6 +124,7 @@ def delete_prayer_view(request, prayer_id):
     return redirect('prayer_list')
 
 @require_POST
+@login_required
 def mark_as_prayed_over_view(request, prayer_id):
     repo = get_repository()
     repo.increment_prayed_over(str(prayer_id))
@@ -107,6 +133,7 @@ def mark_as_prayed_over_view(request, prayer_id):
     return redirect('prayer_list')
 
 @require_POST
+@login_required
 def update_prayer_status_view(request, prayer_id):
     repo = get_repository()
     new_status = request.POST.get('status')
@@ -120,6 +147,7 @@ def update_prayer_status_view(request, prayer_id):
     return redirect('prayer_list')
 
 @require_POST
+@login_required
 def generate_from_existing_view(request, prayer_id, length='medium'):
     """Generate a new prayer based on an existing one"""
     # For DynamoDB mode, we read text directly via ORM for source text
@@ -130,20 +158,35 @@ def generate_from_existing_view(request, prayer_id, length='medium'):
     if length not in ['short', 'medium', 'long']:
         length = 'medium'
     
+    # Enforce per-user daily quota before any API call
+    today = timezone.now().date()
+    repo = get_repository()
+    used = 0
+    try:
+        used = repo.get_daily_quota(request.user.id, today)
+    except Exception:
+        used = 0
+    if used >= 10:
+        return redirect('prayer_list')
+
     suggested_text, references = generate_prayer_from_existing(prayer.text, length)
     
     if suggested_text:
         # Create a new prayer based on the generated text
-        repo = get_repository()
         repo.create_prayer(
             text=suggested_text,
             is_ai_generated=True,
             ai_generation_references=references,
             status='new'
         )
+        try:
+            repo.increment_daily_quota(request.user.id, today)
+        except Exception:
+            pass
     
     return redirect('prayer_list')
 
+@login_required
 def prayer_topics_view(request):
     """Return a JSON list of prayer topics"""
     topics = list(get_prayer_topics().keys())
@@ -154,6 +197,7 @@ def get_random_topic():
     topics = list(get_prayer_topics().keys())
     return random.choice(topics)
 
+@login_required
 def topic_prayer_preview(request, topic=None):
     """Generate a short prayer preview for a topic, optionally choose a random topic"""
     # If no topic provided, choose a random one
@@ -173,7 +217,11 @@ def topic_prayer_preview(request, topic=None):
     script_name = request.META.get('SCRIPT_NAME', '')
     if topic not in PRAYER_TOPICS:
         return JsonResponse({'error': 'Topic not found'}, status=404)
-    if not model:
+    try:
+        apologist_model = get_model()
+    except Exception as e:
+        apologist_model = None
+    if not apologist_model:
         base = f"a short prayer for '{topic}'"
         verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
         prayer_text = (
@@ -192,6 +240,7 @@ def topic_prayer_preview(request, topic=None):
             'prayer': prayer_text,
             'references': references,
             'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
+            'notice': 'AI is unavailable right now. Showing a default prayer.',
         })
     
     try:
@@ -199,7 +248,7 @@ def topic_prayer_preview(request, topic=None):
         full_prompt = f"""Create a short prayer (50-70 words) for the topic "{topic}" 
 that incorporates the essence of this Bible verse: {selected_verse}."""
         
-        response = model.generate_content(full_prompt)
+        response = apologist_model.generate_content(full_prompt)
         
         if hasattr(response, 'text'):
             prayer_text = response.text
@@ -215,7 +264,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
         references = f"AI-generated short prayer for '{topic}' based on {selected_verse.split(' - ')[0]}"
     
     except Exception as e:
-        print(f"Error generating topic prayer: {e}")
+        logger.exception("Error generating topic prayer preview")
         # Fallback on any generation error as well
         verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
         prayer_text = (
@@ -233,6 +282,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
             'prayer': prayer_text,
             'references': references,
             'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
+            'notice': 'Failed to connect to AI. Please try again later.',
         })
     
     # Return JSON response with the preview data
@@ -245,6 +295,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
         'topic_url': f"{script_name}/prayers/topic_prayer/{topic}/",
     })
 
+@login_required
 def topic_prayer_view(request, topic):
     """Generate a short prayer based on the selected topic"""
     # URL encode the topic when it comes in (spaces become %20, etc.)
@@ -265,15 +316,30 @@ def topic_prayer_view(request, topic):
         selected_verse = random.choice(verses) if verses else ""
         
         # Generate prayer using the selected verse
-        if not model:
-            return JsonResponse({'error': 'API not available'}, status=500)
-        
+        apologist_model = get_model()
+        if not apologist_model:
+            # Fallback prayer JSON to avoid HTML error pages
+            fallback_text = (
+                f"Lord, we seek Your guidance for {topic.lower()}. Grant wisdom and peace. Amen."
+            )
+            verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
+            references = (
+                f"Fallback prayer for '{topic}' based on {verse_ref}"
+                if verse_ref else f"Fallback prayer for '{topic}'"
+            )
+            return JsonResponse({
+                'topic': topic,
+                'verse': selected_verse,
+                'prayer': fallback_text,
+                'references': references,
+                'notice': 'AI is unavailable right now. Showing a default prayer.'
+            })
         try:
             # Use the selected verse for the prayer generation
             full_prompt = f"""Create a short prayer (50-70 words) for the topic "{topic}" 
 that incorporates the essence of this Bible verse: {selected_verse}."""
             
-            response = model.generate_content(full_prompt)
+            response = apologist_model.generate_content(full_prompt)
             
             if hasattr(response, 'text'):
                 prayer_text = response.text
@@ -297,21 +363,36 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
             })
             
         except Exception as e:
-            print(f"Error generating topic prayer: {e}")
-            return JsonResponse({'error': f'Error generating prayer: {str(e)}'}, status=500)
+            logger.exception("Error generating topic prayer (AJAX)")
+            fallback_text = (
+                f"Merciful God, help us in the area of {topic.lower()}. Strengthen our faith. Amen."
+            )
+            verse_ref = selected_verse.split(' - ')[0] if selected_verse else None
+            references = (
+                f"Fallback prayer for '{topic}' based on {verse_ref}"
+                if verse_ref else f"Fallback prayer for '{topic}'"
+            )
+            return JsonResponse({
+                'topic': topic,
+                'verse': selected_verse,
+                'prayer': fallback_text,
+                'references': references,
+                'notice': 'Failed to connect to AI. Showing a default prayer.'
+            })
     
     # For non-AJAX requests (initial page load), select a verse and generate a prayer
     selected_verse = random.choice(verses) if verses else ""
     
     # Get additional Bible verses related to the topic
     additional_verses = []
-    if model:
+    apologist_model_for_additional_verses = get_model()
+    if apologist_model_for_additional_verses:
         try:
             prompt = f"""Provide 7 more Bible verses related to the topic of "{topic}". 
 Format each as "Book Chapter:Verse - The verse text." 
 Use different books and chapters for variety. Don't include any explanations, just the verses."""
             
-            response = model.generate_content(prompt)
+            response = apologist_model_for_additional_verses.generate_content(prompt)
             
             if hasattr(response, 'text'):
                 verses_text = response.text
@@ -340,8 +421,8 @@ Use different books and chapters for variety. Don't include any explanations, ju
                     
                     if line:  # Only add non-empty lines
                         additional_verses.append(line)
-        except Exception as e:
-            print(f"Error getting additional verses: {e}")
+        except Exception:
+            logger.exception("Error getting additional verses")
     
     # Combine original verses with additional ones, but don't exceed 10 total
     all_verses = verses.copy()
@@ -350,7 +431,8 @@ Use different books and chapters for variety. Don't include any explanations, ju
             all_verses.append(verse)
     
     # Generate prayer using the selected verse
-    if not model:
+    apologist_model = get_model()
+    if not apologist_model:
         prayer_text = "Prayer generation is currently unavailable. Please try again later."
         references = "API not available"
     else:
@@ -359,7 +441,7 @@ Use different books and chapters for variety. Don't include any explanations, ju
             full_prompt = f"""Create a short prayer (50-70 words) for the topic "{topic}" 
 that incorporates the essence of this Bible verse: {selected_verse}."""
             
-            response = model.generate_content(full_prompt)
+            response = apologist_model.generate_content(full_prompt)
             
             if hasattr(response, 'text'):
                 prayer_text = response.text
@@ -374,8 +456,8 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
             # Generate a reference that includes the specific verse used
             references = f"AI-generated short prayer for '{topic}' based on {selected_verse.split(' - ')[0]}"
             
-        except Exception as e:
-            print(f"Error generating topic prayer: {e}")
+        except Exception:
+            logger.exception("Error generating topic prayer (page)")
             prayer_text = "An error occurred while generating the prayer. Please try again."
             references = f"Error: {str(e)}"
     
@@ -400,6 +482,7 @@ that incorporates the essence of this Bible verse: {selected_verse}."""
     return render(request, 'prayers/topic_prayer.html', context)
 
 @require_POST
+@login_required
 def save_generated_prayer(request):
     if request.method == 'POST':
         prayer_text = request.POST.get('prayer_text')
@@ -420,6 +503,14 @@ def save_generated_prayer(request):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': False, 'error': 'Invalid request'})
     return redirect('prayer_list')
+
+@login_required
+def profile_view(request):
+    user = request.user
+    context = {
+        'user_obj': user,
+    }
+    return render(request, 'profile.html', context)
 
 # TODO:
 # - View for updating prayer status (e.g., moving in Kanban)

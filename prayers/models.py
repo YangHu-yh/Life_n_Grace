@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 
 class Prayer(models.Model):
     PRAYER_STATUS_CHOICES = [
@@ -45,3 +46,29 @@ class Prayer(models.Model):
             if old_prayer.text != self.text:
                 self.has_been_changed = True
         super().save(*args, **kwargs)
+
+
+class DailyGenerationQuota(models.Model):
+    """Tracks how many AI generations a user consumed for a given UTC date."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_generation_quotas')
+    date = models.DateField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('user', 'date')
+
+    def __str__(self):
+        return f"{self.user_id} {self.date} -> {self.count}"
+
+
+class SignupThrottle(models.Model):
+    """Limits number of accounts created from a single IP within one UTC day."""
+    ip_address = models.GenericIPAddressField()
+    date = models.DateField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('ip_address', 'date')
+
+    def __str__(self):
+        return f"{self.ip_address} {self.date} -> {self.count}"
