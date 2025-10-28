@@ -359,7 +359,13 @@
                             <i class="bi bi-stars me-2"></i>AI-Generated Prayer Preview
                         </h5>
                         <div class="mb-3">
+                            <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Editor tabs">
+                                <button type="button" class="btn btn-outline-secondary active" id="editTabBtn">Edit</button>
+                                <button type="button" class="btn btn-outline-secondary" id="previewTabBtn">Preview</button>
+                            </div>
                             <textarea id="previewPrayerText" class="form-control" rows="8" placeholder="Your AI-generated prayer will appear here"></textarea>
+                            <div class="small text-muted mt-2">Rendered preview</div>
+                            <div id="previewPrayerRendered" class="border rounded p-3 mt-1" style="background:#fff;"></div>
                             <div class="small text-muted mt-2" id="prayerReference"></div>
                         </div>
                         <div class="preview-actions">
@@ -596,6 +602,28 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js" integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO" crossorigin="anonymous"></script>
     
     <script>
+        // Minimal markdown renderer for bold/italics/line breaks only; avoids external deps
+        function renderMarkdown(md) {
+            if (!md) return '';
+            let html = md;
+            html = html.replace(/\r\n|\r/g, "\n");
+            // Bold **text**
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Italic *text* or _text_
+            html = html.replace(/(^|\W)\*(?!\*)([^*]+)\*(?=\W|$)/g, '$1<em>$2</em>');
+            html = html.replace(/(^|\W)_([^_]+)_(?=\W|$)/g, '$1<em>$2</em>');
+            // Simple headings: strip leading ### etc.
+            html = html.replace(/^\s*#{1,6}\s*(.+)$/gm, '<strong>$1</strong>');
+            // Horizontal rule ---
+            html = html.replace(/^\s*-{3,}\s*$/gm, '<hr />');
+            // Line breaks: double newline to paragraph; single newline to <br>
+            html = html.replace(/\n{2,}/g, '</p><p>');
+            html = html.replace(/\n/g, '<br />');
+            // Wrap
+            html = '<p>' + html + '</p>';
+            return html;
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Handle AI prayer generation via AJAX
             const aiPrayerForm = document.getElementById('generatePrayerBtn').closest('form');
@@ -607,6 +635,9 @@
             const hiddenPrayerText = document.getElementById('hiddenPrayerText');
             const hiddenReferences = document.getElementById('hiddenReferences');
             const cancelPreviewBtn = document.getElementById('cancelPreviewBtn');
+            const previewPrayerRendered = document.getElementById('previewPrayerRendered');
+            const editTabBtn = document.getElementById('editTabBtn');
+            const previewTabBtn = document.getElementById('previewTabBtn');
             
             // Topic preview elements
             const topicPreviewBtns = document.querySelectorAll('.topic-preview-btn');
@@ -772,7 +803,17 @@
                             prayerReference.textContent = data.references;
                             hiddenPrayerText.value = data.prayer;
                             hiddenReferences.value = data.references;
+                            if (previewPrayerRendered) {
+                                previewPrayerRendered.innerHTML = renderMarkdown(data.prayer);
+                            }
                             aiGeneratedPreview.style.display = 'block';
+                            // Default to Preview tab after generation
+                            if (previewTabBtn && editTabBtn) {
+                                previewTabBtn.classList.add('active');
+                                editTabBtn.classList.remove('active');
+                                previewPrayerRendered.style.display = 'block';
+                                previewPrayerText.style.display = 'none';
+                            }
                         } else {
                             // Show error
                             alert('Error: ' + (data.error || 'Failed to generate prayer'));
@@ -789,6 +830,26 @@
             if (previewPrayerText) {
                 previewPrayerText.addEventListener('input', function() {
                     hiddenPrayerText.value = previewPrayerText.value;
+                    if (previewPrayerRendered) {
+                        previewPrayerRendered.innerHTML = renderMarkdown(previewPrayerText.value);
+                    }
+                });
+            }
+
+            // Toggle between Edit and Preview tabs
+            if (editTabBtn && previewTabBtn && previewPrayerText && previewPrayerRendered) {
+                editTabBtn.addEventListener('click', function() {
+                    editTabBtn.classList.add('active');
+                    previewTabBtn.classList.remove('active');
+                    previewPrayerText.style.display = 'block';
+                    previewPrayerRendered.style.display = 'none';
+                });
+                previewTabBtn.addEventListener('click', function() {
+                    previewTabBtn.classList.add('active');
+                    editTabBtn.classList.remove('active');
+                    previewPrayerRendered.innerHTML = renderMarkdown(previewPrayerText.value);
+                    previewPrayerRendered.style.display = 'block';
+                    previewPrayerText.style.display = 'none';
                 });
             }
             

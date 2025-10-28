@@ -68,6 +68,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Run first so DB errors can trigger an auto-migrate + retry on Lambda /tmp sqlite
+    "prayer_app_project.middleware.AutoMigrateOnDbErrorMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -241,12 +243,14 @@ AUTHENTICATION_BACKENDS = (
 )
 LOGIN_REDIRECT_URL = reverse_lazy("prayer_list")
 LOGOUT_REDIRECT_URL = reverse_lazy("home")
+LOGIN_URL = reverse_lazy("account_login")
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_EMAIL_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_LOGOUT_ON_GET = False
 ACCOUNT_LOGIN_ON_SIGNUP = False
 ACCOUNT_SIGNUP_REDIRECT_URL = reverse_lazy("account_login")
+ACCOUNT_LOGOUT_REDIRECT_URL = reverse_lazy("home")
 
 # Google OAuth credentials (provided via env/Zappa). Only enable the provider when configured
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
@@ -318,3 +322,5 @@ FORCE_SCRIPT_NAME = os.getenv('DJANGO_FORCE_SCRIPT_NAME') or None
 if FORCE_SCRIPT_NAME:
     # Ensure Django builds absolute URLs correctly behind API Gateway/CloudFront
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Ensure allauth builds URLs with the stage prefix and https
+    ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'

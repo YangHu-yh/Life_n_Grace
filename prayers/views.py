@@ -17,9 +17,31 @@ from .apologist_client import (
     PRAYER_TOPICS,
 )
 import random
+import re
+import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_prayer_text(text: str) -> str:
+    """Remove AI disclaimers and verse-citation phrasing from AI output.
+    Keep only the prayer content.
+    """
+    if not isinstance(text, str):
+        return text
+    cleaned = text.strip()
+    # Drop leading common disclaimers
+    cleaned = re.sub(r"^\s*As an AI[^\n]*\n?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^\s*As a language model[^\n]*\n?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^\s*I (?:can|cannot|can't)[^\n]*\n?", "", cleaned, flags=re.IGNORECASE)
+    # Remove inline verse mentions like "based on Proverbs 3:5-6"
+    cleaned = re.sub(r"\b(based on|reflect(?:s|ing) the truth of)\s+[A-Za-z]+\s*\d+[:\u2013\-]\d+(?:[\u2013\-]\d+)?", "", cleaned, flags=re.IGNORECASE)
+    # Strip surrounding quotes
+    cleaned = cleaned.strip('"\u201c\u201d\u2018\u2019').strip()
+    # Collapse multiple blank lines
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned
 
 @login_required
 def prayer_list_view(request):
@@ -245,20 +267,37 @@ def topic_prayer_preview(request, topic=None):
     
     try:
         # Use the already selected verse for the prayer generation
-        full_prompt = f"""Create a short prayer (50-70 words) for the topic "{topic}" 
-that incorporates the essence of this Bible verse: {selected_verse}."""
+        verse_snippet = (selected_verse or "")[:300]
+        full_prompt = (
+            "Return ONLY valid JSON (no markdown, no code fences, no preface). "
+            "Schema example: {\"prayer\": \"string 50-70 words; end with 'In Jesus’ name, amen.'\"}. "
+            "Do not mention verse names or numbers.\n"
+            f"Topic: \"{topic}\". Incorporate this verse text: {verse_snippet}."
+        )
         
         response = apologist_model.generate_content(full_prompt)
         
+        raw_text = None
         if hasattr(response, 'text'):
-            prayer_text = response.text
+            raw_text = response.text
         elif response.parts:
-            prayer_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+            raw_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
         else:
             if response.candidates and response.candidates[0].content.parts:
-                prayer_text = ''.join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
+                raw_text = ''.join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
             else:
-                prayer_text = "Could not generate a prayer at this time."
+                raw_text = ""
+
+        prayer_text = ""
+        if raw_text:
+            try:
+                obj = json.loads(raw_text)
+                if isinstance(obj, dict):
+                    prayer_text = obj.get('prayer') or ""
+            except Exception:
+                prayer_text = _sanitize_prayer_text(raw_text)
+        if not prayer_text:
+            prayer_text = "Could not generate a prayer at this time."
         
         # Generate a reference that includes the specific verse used
         references = f"AI-generated short prayer for '{topic}' based on {selected_verse.split(' - ')[0]}"
@@ -336,20 +375,37 @@ def topic_prayer_view(request, topic):
             })
         try:
             # Use the selected verse for the prayer generation
-            full_prompt = f"""Create a short prayer (50-70 words) for the topic "{topic}" 
-that incorporates the essence of this Bible verse: {selected_verse}."""
+            verse_snippet = (selected_verse or "")[:300]
+            full_prompt = (
+                "Return ONLY valid JSON (no markdown, no code fences, no preface). "
+                "Schema example: {\"prayer\": \"string 50-70 words; end with 'In Jesus’ name, amen.'\"}. "
+                "Do not mention verse names or numbers.\n"
+                f"Topic: \"{topic}\". Incorporate this verse text: {verse_snippet}."
+            )
             
             response = apologist_model.generate_content(full_prompt)
             
+            raw_text = None
             if hasattr(response, 'text'):
-                prayer_text = response.text
+                raw_text = response.text
             elif response.parts:
-                prayer_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+                raw_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
             else:
                 if response.candidates and response.candidates[0].content.parts:
-                    prayer_text = ''.join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
+                    raw_text = ''.join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
                 else:
-                    prayer_text = "Could not generate a prayer at this time."
+                    raw_text = ""
+
+            prayer_text = ""
+            if raw_text:
+                try:
+                    obj = json.loads(raw_text)
+                    if isinstance(obj, dict):
+                        prayer_text = obj.get('prayer') or ""
+                except Exception:
+                    prayer_text = _sanitize_prayer_text(raw_text)
+            if not prayer_text:
+                prayer_text = "Could not generate a prayer at this time."
             
             # Generate a reference that includes the specific verse used
             references = f"AI-generated short prayer for '{topic}' based on {selected_verse.split(' - ')[0]}"

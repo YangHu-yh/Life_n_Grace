@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Tuple
 import requests
 import re
+import json
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,38 @@ class ApologistModel:
                 return val
         # Fallback empty string
         return ""
+
+    def _extract_prayer_body(self, raw_text: str) -> str:
+        """Extract only the prayer body from mixed prose/markdown responses.
+        - Removes headings, prompts, separators
+        - Captures from common openings to the line containing Amen.
+        """
+        if not isinstance(raw_text, str) or not raw_text.strip():
+            return raw_text
+        text = raw_text.strip()
+        # Remove code fences and horizontal rules
+        text = re.sub(r"```[\s\S]*?```", "", text)
+        text = re.sub(r"^\s*[-_]{3,}\s*$", "", text, flags=re.MULTILINE)
+        # Drop common prefaces and headings
+        text = re.sub(r"^\s*(Certainly\.|Sure\.|As an AI[^\n]*|Prayer Prompt:.*)$\n?", "", text, flags=re.IGNORECASE | re.MULTILINE)
+        # Identify prayer start
+        start_match = re.search(r"(?im)^(Heavenly Father|Dear God|Lord|Gracious Father|Almighty God|Father God)[,\s]", text)
+        if start_match:
+            start_idx = start_match.start()
+        else:
+            start_idx = 0
+        # Identify prayer end (Amen.)
+        end_match = None
+        # Prefer a concluding Amen on its own line or sentence end
+        for pat in [r"(?im)^\s*In Jesus.? name[,\s]*amen\.?\s*$", r"(?im)^\s*amen\.?\s*$", r"(?i)amen\.?\s*$"]:
+            end_match = re.search(pat, text)
+            if end_match:
+                break
+        end_idx = end_match.end() if end_match else len(text)
+        body = text[start_idx:end_idx].strip()
+        # Trim trailing extra content after Amen
+        body = re.sub(r"(?is)(amen\.?)(.*)$", r"\1", body)
+        return body.strip()
 
     def generate_content(self, prompt_text: str) -> _ApologistResponse:
         # Build OpenAI-style payload
@@ -286,13 +319,30 @@ def get_ai_prayer_suggestion(prompt_text: str, word_count: str = "medium") -> Tu
             "long": "200-500 words"
         }
         word_range = count_ranges.get(word_count, count_ranges["medium"])
-        full_prompt = f"""Generate a prayer suggestion based on the following topic or need: "{prompt_text}". 
-The prayer should be comforting, inspirational, and approximately {word_range} in length.
-Include appropriate references to Scripture where relevant."""
+        full_prompt = (
+            "Return ONLY valid JSON (no markdown, no code fences, no preface). "
+            "Schema example: {\"prayer\": \"string {word_range}; end with 'In Jesus’ name, amen.'\"}. "
+            "Do not include headings, disclaimers, or verse citations; keep only the prayer text.\n"
+            f"Need: \"{prompt_text}\"."
+        )
         response = model.generate_content(full_prompt)
-        suggested_prayer = response.text if hasattr(response, 'text') else ""
-        if not suggested_prayer and hasattr(response, 'parts'):
-            suggested_prayer = ''.join(part.text for part in getattr(response, 'parts') if hasattr(part, 'text'))
+        raw_text = ""
+        if hasattr(response, 'text'):
+            raw_text = response.text or ""
+        elif hasattr(response, 'parts') and response.parts:
+            raw_text = ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+        suggested_prayer = ""
+        if raw_text:
+            try:
+                obj = json.loads(raw_text)
+                if isinstance(obj, dict):
+                    suggested_prayer = obj.get('prayer') or ""
+            except Exception:
+                # Fallback: strip leading generic disclaimers
+                cleaned = model._extract_prayer_body(raw_text)
+                cleaned = re.sub(r"^\s*As an AI[^\n]*\n?", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r"^\s*Certainly[,:]?\s*", "", cleaned, flags=re.IGNORECASE)
+                suggested_prayer = cleaned
         if not suggested_prayer:
             suggested_prayer = "Could not parse the prayer suggestion from the AI response."
         references = f"AI-generated based on the prompt: \"{prompt_text[:150]}{'...' if len(prompt_text) > 150 else ''}\" ({word_range})."
