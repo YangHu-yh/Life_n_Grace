@@ -8,6 +8,14 @@ import sys
 import subprocess
 from pathlib import Path
 
+FAILED_STEPS = []
+
+def _tail(text: str, max_lines: int = 60) -> str:
+    lines = (text or "").splitlines()
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    return "\n".join(lines[-max_lines:])
+
 def run_command(command, description, env=None):
     """Run a shell command and handle errors"""
     print(f"\n{'='*50}")
@@ -22,9 +30,18 @@ def run_command(command, description, env=None):
         if result.stdout:
             print("Output:", result.stdout)
     else:
-        print("❌ Error!")
+        print("❌ Error! (exit code:", result.returncode, ")")
+        if result.stdout:
+            print("----- STDOUT -----\n" + _tail(result.stdout))
         if result.stderr:
-            print("Error:", result.stderr)
+            print("----- STDERR -----\n" + _tail(result.stderr))
+        FAILED_STEPS.append({
+            "description": description,
+            "command": command,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        })
         return False
     return True
 
@@ -107,7 +124,35 @@ def run_migrations():
     """Run database migrations (for local testing)"""
     print("Running migrations...")
     python_cmd, _ = get_venv_paths()
-    return run_command(f"{python_cmd} manage.py migrate", "Running migrations")
+    ok = run_command(f"{python_cmd} manage.py migrate --traceback", "Running migrations")
+    if ok:
+        return True
+
+    # Detect a common local SQLite corruption: missing contenttypes table but migrations think applied
+    # If so, reset local SQLite DB and retry once.
+    try:
+        marker = "no such table: django_content_type"
+        hit = False
+        for step in FAILED_STEPS:
+            if step.get("description") == "Running migrations" and step.get("stderr") and marker in step.get("stderr"):
+                hit = True
+                break
+        if hit:
+            project_root = Path(__file__).resolve().parent
+            sqlite_db = project_root / "db.sqlite3"
+            if sqlite_db.exists():
+                print("\n⚠️  Detected corrupted local SQLite schema (missing django_content_type). Resetting db.sqlite3 and retrying migrations once...")
+                try:
+                    sqlite_db.unlink()
+                    print(f"Deleted: {sqlite_db}")
+                except Exception as e:
+                    print(f"Could not delete {sqlite_db}: {e}")
+                # Retry migrate after reset
+                return run_command(f"{python_cmd} manage.py migrate --traceback", "Running migrations (after reset)")
+    except Exception:
+        pass
+
+    return False
 
 def make_migrations():
     """Create new migrations for changed models."""
@@ -124,17 +169,17 @@ def clean_caches():
     print("Cleaning caches and pip cache...")
     _, pip_cmd = get_venv_paths()
     steps = [
-        ("find . -name \"__pycache__\" -type d -exec rm -rf {} +", "Removing __pycache__ directories"),
-        ("find . -name '*.py[co]' -delete", "Removing *.pyc/*.pyo files"),
-        ("find . -maxdepth 2 -type f -name '*.tar.gz' -delete", "Removing local *.tar.gz build archives"),
+        ("find . -name \"__pycache__\" -type d -exec rm -rf {} + 2>/dev/null || true", "Removing __pycache__ directories"),
+        ("find . -name '*.py[co]' -delete 2>/dev/null || true", "Removing *.pyc/*.pyo files"),
+        ("find . -maxdepth 2 -type f -name '*.tar.gz' -delete 2>/dev/null || true", "Removing local *.tar.gz build archives"),
         ("rm -rf .pytest_cache .mypy_cache .ruff_cache || true", "Removing local tool caches"),
-        (f"{pip_cmd} cache purge", "Purging pip cache (current environment)"),
+        (f"{pip_cmd} cache purge || true", "Purging pip cache (current environment)"),
         ("rm -rf ~/.cache/pip ~/Library/Caches/pip 2>/dev/null || true", "Removing user pip caches (if present)")
     ]
-    ok = True
     for cmd, desc in steps:
-        ok = run_command(cmd, desc) and ok
-    return ok
+        # Best-effort: report errors but don't fail the overall process on cache cleanup
+        run_command(cmd, desc)
+    return True
 
 def deploy_dev():
     """Deploy to development environment"""
@@ -187,11 +232,29 @@ def main():
             print("✅ Cleaned caches.")
         else:
             print("❌ Cleaning caches encountered errors.")
+            if FAILED_STEPS:
+                print("\n===== Failure summary =====")
+                for i, step in enumerate(FAILED_STEPS, 1):
+                    print(f"\n[{i}] {step['description']}\nCommand: {step['command']}\nExit code: {step['returncode']}")
+                    if step['stderr']:
+                        print("---- STDERR (tail) ----\n" + _tail(step['stderr']))
+                    if step['stdout']:
+                        print("---- STDOUT (tail) ----\n" + _tail(step['stdout']))
+            sys.exit(1)
     elif command == "migrate":
         if update_migrations():
             print("✅ Migrations updated locally.")
         else:
             print("❌ Migration update failed.")
+            if FAILED_STEPS:
+                print("\n===== Failure summary =====")
+                for i, step in enumerate(FAILED_STEPS, 1):
+                    print(f"\n[{i}] {step['description']}\nCommand: {step['command']}\nExit code: {step['returncode']}")
+                    if step['stderr']:
+                        print("---- STDERR (tail) ----\n" + _tail(step['stderr']))
+                    if step['stdout']:
+                        print("---- STDOUT (tail) ----\n" + _tail(step['stdout']))
+            sys.exit(1)
     elif command == "bootstrap":
         print("Bootstrapping project: venv → install → migrate → collectstatic → clean caches")
         ok = True
@@ -202,11 +265,20 @@ def main():
         ok = install_dependencies() and ok
         ok = update_migrations() and ok
         ok = collect_static() and ok
-        ok = clean_caches() and ok
+        clean_caches()
         if ok:
             print("✅ Bootstrap complete! If not already, activate venv: 'source venv/bin/activate'")
         else:
             print("❌ Bootstrap encountered errors.")
+            if FAILED_STEPS:
+                print("\n===== Failure summary =====")
+                for i, step in enumerate(FAILED_STEPS, 1):
+                    print(f"\n[{i}] {step['description']}\nCommand: {step['command']}\nExit code: {step['returncode']}")
+                    if step['stderr']:
+                        print("---- STDERR (tail) ----\n" + _tail(step['stderr']))
+                    if step['stdout']:
+                        print("---- STDOUT (tail) ----\n" + _tail(step['stdout']))
+            sys.exit(1)
     
     elif command == "dev":
         if not check_requirements():
@@ -218,6 +290,15 @@ def main():
             print(f"{get_zappa_cmd()} manage dev migrate")
         else:
             print("❌ Development deployment failed!")
+            if FAILED_STEPS:
+                print("\n===== Failure summary =====")
+                for i, step in enumerate(FAILED_STEPS, 1):
+                    print(f"\n[{i}] {step['description']}\nCommand: {step['command']}\nExit code: {step['returncode']}")
+                    if step['stderr']:
+                        print("---- STDERR (tail) ----\n" + _tail(step['stderr']))
+                    if step['stdout']:
+                        print("---- STDOUT (tail) ----\n" + _tail(step['stdout']))
+            sys.exit(1)
     
     elif command == "prod":
         if not check_requirements():
@@ -229,6 +310,15 @@ def main():
             print(f"{get_zappa_cmd()} manage production migrate")
         else:
             print("❌ Production deployment failed!")
+            if FAILED_STEPS:
+                print("\n===== Failure summary =====")
+                for i, step in enumerate(FAILED_STEPS, 1):
+                    print(f"\n[{i}] {step['description']}\nCommand: {step['command']}\nExit code: {step['returncode']}")
+                    if step['stderr']:
+                        print("---- STDERR (tail) ----\n" + _tail(step['stderr']))
+                    if step['stdout']:
+                        print("---- STDOUT (tail) ----\n" + _tail(step['stdout']))
+            sys.exit(1)
     
     else:
         print(f"Unknown command: {command}")
