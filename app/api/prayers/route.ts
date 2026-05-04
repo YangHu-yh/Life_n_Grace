@@ -1,0 +1,137 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prismaMain } from "@/lib/db/main";
+import { getUserIdFromRequest } from "@/lib/auth";
+
+const VALID_LANES = ["ACTIVE", "ACCOMPLISHED", "REROUTED", "PRAISE"] as const;
+const LEGACY_STAGE_TO_LANE: Record<string, (typeof VALID_LANES)[number]> = {
+  SEED: "ACTIVE",
+  SPROUT: "ACTIVE",
+  BLOOM: "ACCOMPLISHED"
+};
+const LANE_TO_LEGACY_STAGE: Record<(typeof VALID_LANES)[number], "SEED" | "BLOOM"> = {
+  ACTIVE: "SEED",
+  ACCOMPLISHED: "BLOOM",
+  REROUTED: "SEED",
+  PRAISE: "SEED"
+};
+
+type PrayerLane = (typeof VALID_LANES)[number];
+
+function isPrayerLane(value: unknown): value is PrayerLane {
+  return typeof value === "string" && VALID_LANES.includes(value as PrayerLane);
+}
+
+function startOfTodayUtc() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export async function GET(request: NextRequest) {
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  const prayers = await prismaMain.prayerRequest.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" }
+  });
+  return NextResponse.json({ prayers });
+}
+
+export async function POST(request: NextRequest) {
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  const { topic, notes, lane } = await request.json();
+  if (!topic) {
+    return NextResponse.json(
+      { error: "Prayer topic is required." },
+      { status: 400 }
+    );
+  }
+  if (lane && !isPrayerLane(lane)) {
+    return NextResponse.json({ error: "Invalid lane." }, { status: 400 });
+  }
+  const laneToPersist: PrayerLane = isPrayerLane(lane) ? lane : "ACTIVE";
+  const prayer = await prismaMain.prayerRequest.create({
+    data: {
+      userId,
+      topic,
+      notes: notes ? String(notes) : null,
+      lane: laneToPersist,
+      stage: LANE_TO_LEGACY_STAGE[laneToPersist]
+    }
+  });
+  return NextResponse.json({ prayer });
+}
+
+export async function PATCH(request: NextRequest) {
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  const { id, lane, stage, markPrayed } = await request.json();
+  if (!id) {
+    return NextResponse.json(
+      { error: "Prayer id is required." },
+      { status: 400 }
+    );
+  }
+
+  if (markPrayed === true) {
+    const today = startOfTodayUtc();
+    const now = new Date();
+    const updated = await prismaMain.prayerRequest.updateMany({
+      where: { id, userId },
+      data: {
+        prayerCount: { increment: 1 },
+        lastPrayedAt: now
+      }
+    });
+    if (updated.count === 0) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+    await prismaMain.habitCheckin.upsert({
+      where: { userId_date: { userId, date: today } },
+      create: { userId, date: today, completed: true },
+      update: { completed: true }
+    });
+    const prayer = await prismaMain.prayerRequest.findUnique({ where: { id } });
+    return NextResponse.json({ prayer });
+  }
+
+  let laneToPersist: PrayerLane | null = null;
+
+  if (lane) {
+    if (!isPrayerLane(lane)) {
+      return NextResponse.json({ error: "Invalid lane." }, { status: 400 });
+    }
+    laneToPersist = lane;
+  } else if (stage) {
+    if (!["SEED", "SPROUT", "BLOOM"].includes(stage)) {
+      return NextResponse.json({ error: "Invalid stage." }, { status: 400 });
+    }
+    laneToPersist = LEGACY_STAGE_TO_LANE[stage];
+  }
+
+  if (!laneToPersist) {
+    return NextResponse.json(
+      { error: "Prayer lane is required." },
+      { status: 400 }
+    );
+  }
+
+  const updated = await prismaMain.prayerRequest.updateMany({
+    where: { id, userId },
+    data: {
+      lane: laneToPersist,
+      stage: LANE_TO_LEGACY_STAGE[laneToPersist]
+    }
+  });
+  if (updated.count === 0) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+  const prayer = await prismaMain.prayerRequest.findUnique({ where: { id } });
+  return NextResponse.json({ prayer });
+}
