@@ -1,278 +1,58 @@
-# AWS Lambda Deployment Guide
-
-This guide will help you deploy your Django Prayer App to AWS Lambda using Zappa.
-
-## Prerequisites
-
-1. **AWS Account**: Make sure you have an AWS account with appropriate permissions
-2. **AWS CLI**: Install and configure AWS CLI
-3. **Python 3.9**: Ensure you're using Python 3.9 (Lambda runtime)
-4. **Virtual Environment**: Always use a virtual environment
-
-## Quickstart
-
-```bash
-# 1) Configure AWS (one-time)
-aws configure
-
-# 2) Bootstrap locally (creates venv, installs, migrates, collects static, cleans caches)
-python deploy.py bootstrap
-
-# 3) Run locally
-venv/bin/python manage.py runserver
-
-# 4) Deploy (choose one)
-python deploy.py dev
-# or
-python deploy.py prod
-```
-
-Common maintenance:
-```bash
-# Clean Python caches and pip caches
-python deploy.py clean
-
-# Make and apply migrations locally
-python deploy.py migrate
-```
-
-## Step-by-Step Deployment
-
-### 1. AWS Setup
-
-First, configure your AWS credentials:
-
-```bash
-aws configure
-```
-
-You'll need:
-- AWS Access Key ID
-- AWS Secret Access Key  
-- Default region (e.g., us-east-1)
-- Default output format (json)
-
-### 2. Environment Setup
-
-```bash
-# Option A: one-shot bootstrap
-python deploy.py bootstrap
-
-# Option B: manual steps
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py collectstatic --noinput
-
-# Optional: create a local .env and export env vars
-# Include GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET for Google login
-```
-
-### 3. Local Testing
-
-Before deploying, test locally:
-
-```bash
-# Start development server
-venv/bin/python manage.py runserver
-```
-
-### 4. Configure Zappa Settings
-
-Edit `zappa_settings.json` and update:
-
-- `s3_bucket`: Must be globally unique (change "zappa-prayer-app-dev")
-- `aws_region`: Your preferred AWS region
-- `environment_variables`: Your actual secret keys and settings
-
-### 5. Deploy to AWS Lambda
-
-For development:
-```bash
-python deploy.py dev
-```
-
-For production:
-```bash
-python deploy.py prod
-```
-
-### 6. Database Setup (Production)
-
-For production, you'll need Amazon RDS:
-
-1. **Create RDS PostgreSQL Database**:
-   ```bash
-   aws rds create-db-instance \
-     --db-instance-identifier prayer-app-db \
-     --db-instance-class db.t3.micro \
-     --engine postgres \
-     --master-username admin \
-     --master-user-password YourPassword123 \
-     --allocated-storage 20
-   ```
-
-2. **Update Environment Variables**:
-   Add these to your Zappa settings or AWS Lambda environment:
-   ```
-   DB_NAME=prayer_app_db
-   DB_USER=admin
-   DB_PASSWORD=YourPassword123
-   DB_HOST=your-rds-endpoint.amazonaws.com
-   DB_PORT=5432
-   ```
-
-3. **Run Migrations on Lambda**:
-   ```bash
-   zappa manage production migrate
-   ```
-
-### 7. Static Files Setup (S3)
-
-1. **Create S3 Bucket for Static Files**:
-   ```bash
-   aws s3 mb s3://your-static-files-bucket
-   ```
-
-2. **Update Environment Variables**:
-   ```
-   AWS_STORAGE_BUCKET_NAME=your-static-files-bucket
-   AWS_S3_REGION_NAME=us-east-1
-   ```
-
-3. **Upload Static Files**:
-   ```bash
-   python manage.py collectstatic
-   zappa save-python-settings-file production
-   ```
-
-## Important Configuration Notes
-
-### Memory and Timeout
-- **Development**: 512MB memory, 30s timeout
-- **Production**: 1024MB memory, 30s timeout
-- Adjust based on your needs in `zappa_settings.json`
-
-### Environment Variables
-Never store sensitive data in your code. Use:
-- AWS Lambda Environment Variables
-- AWS Systems Manager Parameter Store
-- AWS Secrets Manager
-
-Required for Google Login (django-allauth):
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-
-Make sure `zappa_settings.json` has these under `environment_variables` for each stage.
-
-### CORS Configuration
-If you need CORS support, add to your Django settings:
-```python
-CORS_ALLOWED_ORIGINS = [
-    "https://yourdomain.com",
-    "https://www.yourdomain.com",
-]
-```
-
-## Common Commands
-
-```bash
-# Deploy for first time
-zappa deploy dev
-
-# Update existing deployment
-zappa update dev
-
-# Check status
-zappa status dev
-
-# View logs
-zappa update dev
-
-# Run Django management commands
-zappa manage dev migrate
-zappa manage dev createsuperuser
-zappa manage dev collectstatic
-
-# Undeploy (delete everything)
-zappa undeploy dev
-```
-
-## Consolidated Commands (deploy.py)
-
-```bash
-# Bootstrap: create venv, install, migrate, collectstatic, clean caches
-python deploy.py bootstrap
-
-# Clean up caches (pycache, *.pyc, pip caches)
-python deploy.py clean
-
-# Update local migrations (makemigrations + migrate)
-python deploy.py migrate
-
-# Deploy to Lambda via Zappa (dev/prod)
-python deploy.py dev
-python deploy.py prod
-```
-
-## Troubleshooting
-
-### Common Issues:
-
-1. **Import Errors**: Make sure all dependencies are in requirements.txt
-2. **Permission Errors**: Check AWS IAM permissions
-3. **Database Connection**: Ensure RDS security groups allow Lambda access
-4. **Static Files**: Verify S3 bucket permissions and CORS settings
-5. **Memory Issues**: Increase memory_size in zappa_settings.json
-
-### Debugging:
-
-```bash
-# View recent logs
-zappa tail dev --since 1h
-
-# Enable debug mode temporarily
-zappa update dev --debug
-
-# Check function configuration
-aws lambda get-function --function-name prayer-app-dev
-```
-
-## Security Checklist
-
-- [ ] Change default SECRET_KEY
-- [ ] Set DEBUG=False in production
-- [ ] Configure ALLOWED_HOSTS properly
-- [ ] Use HTTPS only
-- [ ] Set up proper IAM roles
-- [ ] Enable AWS CloudTrail logging
-- [ ] Use AWS Secrets Manager for sensitive data
-
-## Cost Optimization
-
-- Use AWS Lambda free tier (1M requests/month)
-- Configure appropriate memory allocation
-- Set up CloudWatch alarms for monitoring
-- Use RDS on-demand or reserved instances
-
-## Custom Domain (Optional)
-
-To use a custom domain:
-
-1. Configure in `zappa_settings.json`:
-   ```json
-   "domain": "api.yourdomain.com",
-   "certificate_arn": "arn:aws:acm:us-east-1:123456789:certificate/..."
-   ```
-
-2. Deploy with domain:
-   ```bash
-   zappa certify production
-   ```
-
-## Support
-
-For issues:
-1. Check Zappa documentation: https://github.com/spulec/Zappa
-2. AWS Lambda documentation
-3. Django deployment best practices 
+# AWS Deployment Plan
+
+## Architecture
+
+- **Next.js app** deployed on **AWS App Runner** or **ECS Fargate**.
+- **Main database (auth + users)** on **RDS PostgreSQL**.
+- **Journal database** on a **separate RDS PostgreSQL instance**.
+- **Secrets Manager** stores all secrets (JWT, encryption key, API keys).
+- **CloudWatch** for logs and alerts.
+
+## Local testing (Docker)
+
+This repo includes a local Postgres setup to make Prisma migrations reproducible:
+
+1. Install Docker Desktop and ensure the daemon is running.
+2. Start Postgres:
+   - `npm run db:up`
+   - If daemon error appears, launch Docker Desktop and retry.
+3. Set `.env.local` values (example):
+   - `MAIN_DATABASE_URL="postgresql://lifeuser:lifepass@localhost:5432/life_n_grace_main"`
+   - `JOURNAL_DATABASE_URL="postgresql://lifeuser:lifepass@localhost:5432/life_n_grace_journal"`
+4. Run migrations:
+   - `npm run prisma:generate`
+   - `npm run prisma:migrate:main`
+   - `npm run prisma:migrate:journal`
+
+## Security plan
+
+- Journal data is encrypted at the application layer with AES-256-GCM.
+- Separate DB for journal entries reduces blast radius.
+- Use private subnets for databases; app connects via security group rules.
+- Rotate `JOURNAL_ENCRYPTION_KEY` and `AUTH_JWT_SECRET` periodically.
+
+## CI/CD (GitHub Actions)
+
+1. On push to `main`:
+   - Install dependencies
+   - Lint + typecheck
+   - Build Next.js
+2. Build and push container image to ECR.
+3. Deploy updated task to ECS/App Runner.
+
+## Env vars in AWS
+
+- Use `config/env.aws.example` as the template.
+- `MAIN_DATABASE_URL`
+- `JOURNAL_DATABASE_URL`
+- `AUTH_JWT_SECRET`
+- `JOURNAL_ENCRYPTION_KEY`
+- `APOLOGIST_API_KEY`
+- `APOLOGIST_API_URL`
+- `APOLOGIST_MODEL_ID`
+- `APOLOGIST_TRANSLATION`
+
+## Optional scaling
+
+- Add a queue (SQS) for heavy LLM workloads.
+- Add Redis (ElastiCache) for caching prayer generation results.

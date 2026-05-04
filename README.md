@@ -1,99 +1,64 @@
-# Life 'n' Grace - Prayer Journal Application
+# Life 'n' Grace (Next.js + TypeScript)
 
-This is a web application for noting down needs and prayers, with AI-powered prayer suggestions.
+AI prayer generation and secure journaling with a future-ready, mobile-friendly web app.
 
-## Prerequisites
+## Stack
 
-*   Python (Python 3.8-3.12 is recommended for Django 4.2)
-*   pip (Python package installer)
-*   Git (for version control, optional for local setup but good practice)
+- Next.js (App Router) + TypeScript
+- Prisma with two PostgreSQL databases
+- JWT auth (httpOnly cookie)
+- Field-level encryption for journal content
+- Apologist Fusion API for prayer generation
 
-## Getting Started
+## Local setup
 
-These instructions assume you have the project files in a directory named `life_n_grace`.
+1. Install dependencies:
+   - `npm install`
+2. Copy environment variables:
+   - `cp config/env.example .env.local`
+   - (`config/env.example` is prefilled for local Docker Postgres defaults)
+3. Start local Postgres (Docker):
+   - Install and start Docker Desktop
+   - `npm run db:up`
+   - If you see `Cannot connect to the Docker daemon`, open Docker Desktop and wait until it is running, then retry.
+4. Generate Prisma clients:
+   - `npm run prisma:generate`
+5. Prisma migrations read from `.env`:
+   - `cp .env.local .env`
+6. Create and migrate databases:
+   - `npm run prisma:migrate:main`
+   - `npm run prisma:migrate:journal`
+7. Run the dev server:
+   - `npm run dev`
 
-1.  **Navigate to the Project Directory**:
-    Open your terminal and change to the project's root directory (the `life_n_grace` folder):
-    ```bash
-    cd path/to/your/life_n_grace
-    ```
+## Key routes
 
-2.  **Create and Activate a Virtual Environment** (Recommended):
-    From within the `life_n_grace` directory:
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
+- `/` Home
+- `/prayers` Unified prayers and journal workspace
+- `/companion` AI chat companion
+- `/profile` Profile and reminder settings
+- `/login` Sign in
+- `/signup` Create account
+- `/forgot-password` Reset access
+- `/policy` Transparent data usage
 
-3.  **Install Dependencies**:
-    Install the required Python packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+## Auth + secure journal
 
-4.  **Minimal App Pages**:
-    - Home: brief intro and CTA buttons.
-    - Auth: `/accounts/login/` and `/accounts/signup/` powered by django-allauth with Google.
-    - Profile: `/profile/` shows basic user info.
+- Auth uses a JWT stored in a secure, httpOnly cookie.
+- Journal entries are encrypted before storage and live in a separate database.
 
-4.  **Set Environment Variables**:
-    This application now uses the Apologist Fusion Chat Completions API for AI prayer suggestions. Set the following environment variables:
-    ```bash
-    export APOLOGIST_API_KEY="YOUR_API_KEY_HERE"
-    export APOLOGIST_API_URL="https://your-agent-domain/api/v1"  # e.g., https://my.gospel.bot/api/v1
-    export APOLOGIST_MODEL_ID="openai/gpt/4o"                    # optional; defaults to openai/gpt/4o
-    export APOLOGIST_TRANSLATION="esv"                           # optional; esv, niv, kjv, etc.
-    ```
-    *   For persistent storage across terminal sessions, add these lines to your shell configuration file (e.g., `~/.zshrc`, `~/.bashrc`, or `~/.profile`) and then source the file (e.g., `source ~/.zshrc`) or open a new terminal.
-    *   The API is OpenAI-compatible; for details see the Apologist docs: https://apologistproject.org/documentation/apologist-fusion/chat-completion
+## LLM integration
 
-5.  **Apply Database Migrations**:
-    This will set up your database schema. Ensure you are in the `life_n_grace` directory where `manage.py` is located.
-    ```bash
-    python manage.py migrate
-    ```
+Prayer chat uses Apologist Fusion's OpenAI-compatible API. Configure:
 
-6.  **Run the Development Server**:
-    ```bash
-    python manage.py runserver
-    ```
+- `APOLOGIST_API_KEY`
+- `APOLOGIST_API_URL`
+- `APOLOGIST_MODEL_ID`
+- `APOLOGIST_TRANSLATION`
 
-7.  **Access the Application**:
-    - Home: `http://127.0.0.1:8000/`
-    - Login/Signup: `http://127.0.0.1:8000/accounts/login/` (Google button provided)
-    - After login you will be redirected to: `http://127.0.0.1:8000/prayers/`
+## AWS deployment plan
 
-## Google Sign-In (django-allauth)
+See `DEPLOYMENT.md` for the production AWS plan and CI/CD pipeline.
 
-Configure Google OAuth credentials:
-
-1. Create a Google OAuth 2.0 Client (Web) in Google Cloud Console and set Authorized redirect URI to:
-   - `http://127.0.0.1:8000/accounts/google/login/callback/`
-   - For Zappa dev: `https://<your-api-domain>/dev/accounts/google/login/callback/`
-2. Export credentials locally (or set in Zappa envs):
-   ```bash
-   export GOOGLE_CLIENT_ID="your-client-id"
-   export GOOGLE_CLIENT_SECRET="your-client-secret"
-   ```
-3. Start the server and visit `/accounts/login/`.
-
-## Project Structure Overview
-
-*   `life_n_grace/`: The root directory for this application.
-    *   `manage.py`: Django's command-line utility for interacting with your project.
-    *   `requirements.txt`: A list of Python packages required for the project.
-    *   `db.sqlite3`: The SQLite database file (default for development).
-*   `prayer_app_project/`: The Django **project** configuration directory.
-        *   `settings.py`: Core project settings (database, installed apps, static files, etc.).
-        *   `urls.py`: Main URL routing for the entire project.
-        *   `wsgi.py`, `asgi.py`: Entry points for web servers.
-    *   `templates/`: Project-level templates like `home.html` and `profile.html`.
-    *   `prayers/`: A Django **app** dedicated to handling prayer-related features.
-        *   `models.py`: Defines the database tables/schema for prayers.
-        *   `views.py`: Contains the logic for handling web requests and returning responses.
-        *   `forms.py`: Defines forms for user input (e.g., adding a prayer).
-        *   `templates/prayers/`: Contains HTML templates specific to the prayers app.
-        *   `urls.py` (inside `prayers/`): URL routing specific to the prayers app.
-        *   `apologist_client.py`: API client module for Apologist Fusion.
-        *   `migrations/`: Stores database migration files.
-    *   `venv/` (if created): Directory for the Python virtual environment. 
+For AWS environment values, start from `config/env.aws.example` and store
+secrets in AWS Secrets Manager.
