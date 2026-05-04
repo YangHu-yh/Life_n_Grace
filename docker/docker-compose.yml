@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: life-ngrace-postgres
+    environment:
+      POSTGRES_USER: lifeuser
+      POSTGRES_PASSWORD: lifepass
+      POSTGRES_DB: life_n_grace_main
+    ports:
+      - "5432:5432"
+    volumes:
+      - life_ngrace_pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifeuser -d life_n_grace_main"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  life_ngrace_pgdata:

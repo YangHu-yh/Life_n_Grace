@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/journal"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("JOURNAL_DATABASE_URL")
+}
+
+model JournalEntry {
+  id             String        @id @default(cuid())
+  userId         String
+  title          String
+  ciphertext     String
+  iv             String
+  status         JournalStatus @default(ACTIVE)
+  relatedPrayerId String?
+  sourceLinks    Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, status, createdAt(sort: Desc)])
+}
+
+enum JournalStatus {
+  ACTIVE
+  HISTORY
+}
