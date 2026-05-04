@@ -1,8 +1,0 @@
-Django~=4.2
-zappa~=0.60.2
-django-storages~=1.14.6
-python-decouple~=3.8
-requests~=2.32.0
-django-allauth==0.61.1
-psycopg2-binary~=2.9
-django-redis~=5.4
