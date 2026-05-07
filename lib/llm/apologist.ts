@@ -1,50 +1,54 @@
+import Anthropic from "@anthropic-ai/sdk";
+
 export type ApologistMessage = {
-  role: "system" | "user" | "assistant";
+  role: "user" | "assistant";
   content: string;
 };
 
-async function callApologist(messages: ApologistMessage[]) {
-  const apiKey = process.env.APOLOGIST_API_KEY;
-  const apiUrl = process.env.APOLOGIST_API_URL;
-  const modelId = process.env.APOLOGIST_MODEL_ID ?? "openai/gpt/4o";
+let _client: Anthropic | null = null;
 
-  if (!apiKey || !apiUrl) {
-    throw new Error("APOLOGIST_API_KEY or APOLOGIST_API_URL is not set");
+function getClient(): Anthropic {
+  if (!_client) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+    _client = new Anthropic({ apiKey });
   }
-
-  const response = await fetch(`${apiUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Apologist API error: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("Apologist API response missing content");
-  }
-  return content as string;
+  return _client;
 }
 
-export async function generatePrayerChat(messages: ApologistMessage[]) {
-  const translation = process.env.APOLOGIST_TRANSLATION ?? "esv";
-  return callApologist([
-    {
-      role: "system",
-      content:
-        `You are an encouraging prayer guide for beginner Christians. Respond with a short ${translation} Bible verse reference, a short sample prayer, and a gentle note to ask the Holy Spirit for guidance.`
-    },
-    ...messages
-  ]);
+export async function generatePrayerChat(
+  messages: ApologistMessage[],
+  prayerContext?: { topic: string; notes?: string }
+): Promise<string> {
+  const translation = (process.env.APOLOGIST_TRANSLATION ?? "esv").toUpperCase();
+  const model = process.env.APOLOGIST_MODEL_ID ?? "claude-haiku-4-5-20251001";
+
+  const contextLine = prayerContext
+    ? ` The user is praying about: "${prayerContext.topic}".${prayerContext.notes ? ` Notes: "${prayerContext.notes}".` : ""}`
+    : "";
+
+  const systemPrompt =
+    `You are an encouraging prayer guide for beginner Christians.${contextLine} ` +
+    `Respond with a short ${translation} Bible verse reference, a short sample prayer (2–4 sentences), ` +
+    `and a gentle note to ask the Holy Spirit for personal guidance. Keep your response under 200 words.`;
+
+  const response = await getClient().messages.create({
+    model,
+    max_tokens: 512,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        // Cache the system prompt — it's identical across most requests
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages,
+  });
+
+  const block = response.content[0];
+  if (!block || block.type !== "text") {
+    throw new Error("Unexpected response format from Claude");
+  }
+  return block.text;
 }

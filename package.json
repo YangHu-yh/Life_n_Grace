@@ -15,6 +15,7 @@
     "prisma:migrate:journal": "prisma migrate dev --schema prisma/journal/schema.prisma"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.0",
     "@prisma/client": "^5.18.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.2.4",

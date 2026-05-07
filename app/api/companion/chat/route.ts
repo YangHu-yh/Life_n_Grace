@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const { messages } = await request.json();
+    const { messages, prayerContext } = await request.json();
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
         { error: "Messages are required." },
@@ -35,10 +35,23 @@ export async function POST(request: NextRequest) {
       content: String(message.content ?? "")
     }));
 
+    const safePrayerContext =
+      prayerContext &&
+      typeof prayerContext.topic === "string" &&
+      prayerContext.topic.trim()
+        ? {
+            topic: String(prayerContext.topic).slice(0, 500),
+            notes: prayerContext.notes
+              ? String(prayerContext.notes).slice(0, 2000)
+              : undefined
+          }
+        : undefined;
+
     try {
-      const reply = await generatePrayerChat(safeMessages);
+      const reply = await generatePrayerChat(safeMessages, safePrayerContext);
       return NextResponse.json({ reply, fallback: false });
     } catch {
+      console.error("[POST /api/companion/chat] LLM call failed");
       const lastUserMessage =
         safeMessages
           .slice()
@@ -49,9 +62,9 @@ export async function POST(request: NextRequest) {
         fallback: true
       });
     }
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Prayer failed." },
+      { error: "An unexpected error occurred." },
       { status: 500 }
     );
   }
