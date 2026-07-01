@@ -29,9 +29,7 @@ export async function POST(request: NextRequest) {
     setAuthCookie(token);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Login failed." },
-      { status: 500 }
-    );
+    console.error("[POST /api/auth/login]", error);
+    return NextResponse.json({ error: "Login failed." }, { status: 500 });
   }
 }

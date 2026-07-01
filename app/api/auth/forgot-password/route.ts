@@ -22,12 +22,7 @@ export async function POST(request: NextRequest) {
         "Password reset is not configured yet. Connect an email provider in production."
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Password reset failed."
-      },
-      { status: 500 }
-    );
+    console.error("[POST /api/auth/forgot-password]", error);
+    return NextResponse.json({ error: "Password reset failed." }, { status: 500 });
   }
 }

@@ -24,9 +24,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Signup failed." },
-      { status: 500 }
-    );
+    console.error("[POST /api/auth/signup]", error);
+    return NextResponse.json({ error: "Signup failed." }, { status: 500 });
   }
 }
