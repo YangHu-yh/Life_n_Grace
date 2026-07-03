@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/yanghu/Documents/GitHub/Life_n_Grace/.claude/error-capture.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
