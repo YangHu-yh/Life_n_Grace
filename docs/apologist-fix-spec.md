@@ -1,22 +1,27 @@
 # Apologist API Fix Spec
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-05-06  
 **File:** `lib/llm/apologist.ts`  
 **Priority:** P0 (companion feature is non-functional with placeholder config)
+
+> ⚠️ **Status: PAUSED — API access not yet available**  
+> The Apologist companion AI is disabled until `ANTHROPIC_API_KEY` is provisioned.  
+> The route returns a "not yet available" response when the key is missing.  
+> All code fixes are complete and ready to activate once the key is added.
 
 ---
 
 ## 1. Current Problems
 
-| # | Issue | Impact |
-|---|-------|--------|
-| 1 | Default model ID `"openai/gpt/4o"` uses slashes — invalid for all known providers | Wrong model sent to API → 400/404 error |
-| 2 | No request timeout | If Apologist API hangs, Next.js route hangs until Vercel/ECS 30s timeout |
-| 3 | Error thrown from `callApologist` propagates API key details in `error.message` | Internal details reach the client via the route's catch block |
-| 4 | No URL normalization — double-slash possible if `APOLOGIST_API_URL` ends with `/` | `https://api.example.com//chat/completions` → 404 |
-| 5 | `fetch` has no `signal` — AbortController never set up | Zombie requests waste server connections |
-| 6 | System prompt injected as `role: "system"` alongside user history | Correct for OpenAI-compatible APIs, but the system prompt is re-generated on every call — slight inefficiency |
+| # | Issue | Impact | Status |
+|---|-------|--------|--------|
+| 1 | Default model ID `"openai/gpt/4o"` uses slashes — invalid for all known providers | Wrong model sent to API → 400/404 error | ✅ Fixed (migrated to Anthropic SDK, now `claude-haiku-4-5-20251001`) |
+| 2 | No request timeout | If Apologist API hangs, Next.js route hangs until Vercel/ECS 30s timeout | ✅ Fixed (`timeout: 30_000` added to `messages.create` options) |
+| 3 | Error thrown from `callApologist` propagates API key details in `error.message` | Internal details reach the client via the route's catch block | ✅ Fixed (route catch block only logs, returns generic fallback) |
+| 4 | No URL normalization — double-slash possible if `APOLOGIST_API_URL` ends with `/` | `https://api.example.com//chat/completions` → 404 | ✅ N/A (Anthropic SDK handles URLs internally) |
+| 5 | `fetch` has no `signal` — AbortController never set up | Zombie requests waste server connections | ✅ Fixed (covered by SDK `timeout` option — SDK aborts internally) |
+| 6 | System prompt injected as `role: "system"` alongside user history | Correct for OpenAI-compatible APIs, but the system prompt is re-generated on every call — slight inefficiency | ✅ Mitigated (`cache_control: { type: "ephemeral" }` applied to system prompt block) |
 
 ---
 
@@ -215,7 +220,7 @@ const response = await getClient().messages.create({
 
 ---
 
-## 5. Streaming Response (Optional Enhancement)
+## 5. Streaming Response (Optional Enhancement) ✅ Done
 
 For better perceived UX, stream the companion response:
 

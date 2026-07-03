@@ -49,32 +49,53 @@ export default function CompanionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages })
       });
+
       if (response.status === 401) {
-        setIsLoading(false);
         setIsAuthed(false);
+        setIsLoading(false);
         return;
       }
 
-      const data = await response.json();
-      const assistantMessage =
-        response.ok && data.reply
-          ? String(data.reply)
-          : buildLocalFallbackReply(trimmedInput);
+      if (!response.ok || !response.body) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: buildLocalFallbackReply(trimmedInput) }
+        ]);
+        setIsLoading(false);
+        return;
+      }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: assistantMessage
-        }
-      ]);
+      // Stream the response — add a placeholder and fill it incrementally
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+        setMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { role: "assistant", content: accumulated };
+          return next;
+        });
+      }
+
+      // Flush any remaining bytes
+      accumulated += decoder.decode();
+      if (accumulated) {
+        setMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { role: "assistant", content: accumulated };
+          return next;
+        });
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: buildLocalFallbackReply(trimmedInput)
-        }
+        { role: "assistant", content: buildLocalFallbackReply(trimmedInput) }
       ]);
     } finally {
       setIsLoading(false);

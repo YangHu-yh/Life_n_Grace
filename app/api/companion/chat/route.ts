@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generatePrayerChat, ApologistMessage } from "@/lib/llm/apologist";
+import { streamPrayerChat, ApologistMessage } from "@/lib/llm/apologist";
 import { getUserIdFromRequest } from "@/lib/auth";
 
 function buildFallbackReply(topic: string) {
@@ -15,7 +15,27 @@ function buildFallbackReply(topic: string) {
   ].join("\n");
 }
 
+function textStream(text: string, headers?: Record<string, string>): Response {
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+  return new Response(readable, {
+    headers: { "Content-Type": "text/plain; charset=utf-8", ...headers },
+  });
+}
+
 export async function POST(request: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: "The prayer companion is not yet available. Check back soon!" },
+      { status: 503 }
+    );
+  }
+
   try {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
@@ -47,20 +67,34 @@ export async function POST(request: NextRequest) {
           }
         : undefined;
 
+    const lastUserTopic =
+      safeMessages.slice().reverse().find((m) => m.role === "user")?.content ?? "";
+
     try {
-      const reply = await generatePrayerChat(safeMessages, safePrayerContext);
-      return NextResponse.json({ reply, fallback: false });
-    } catch {
-      console.error("[POST /api/companion/chat] LLM call failed");
-      const lastUserMessage =
-        safeMessages
-          .slice()
-          .reverse()
-          .find((message) => message.role === "user")?.content ?? "";
-      return NextResponse.json({
-        reply: buildFallbackReply(lastUserMessage),
-        fallback: true
+      const sdkStream = streamPrayerChat(safeMessages, safePrayerContext);
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of sdkStream) {
+              if (
+                chunk.type === "content_block_delta" &&
+                chunk.delta.type === "text_delta"
+              ) {
+                controller.enqueue(encoder.encode(chunk.delta.text));
+              }
+            }
+          } finally {
+            controller.close();
+          }
+        },
       });
+      return new Response(readable, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    } catch {
+      console.error("[POST /api/companion/chat] LLM stream failed");
+      return textStream(buildFallbackReply(lastUserTopic), { "X-Fallback": "true" });
     }
   } catch {
     return NextResponse.json(
