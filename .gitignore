@@ -10,3 +10,6 @@ coverage
 *.log
 
 prisma/**/migrations
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
