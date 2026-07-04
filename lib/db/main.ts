@@ -1,4 +1,7 @@
 import { PrismaClient } from "@/generated/main";
+import { ensureEnv } from "@/lib/env";
+
+ensureEnv();
 
 const globalForMain = globalThis as unknown as { prismaMain?: PrismaClient };
 

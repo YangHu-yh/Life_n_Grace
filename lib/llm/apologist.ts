@@ -1,19 +1,21 @@
-import Anthropic from "@anthropic-ai/sdk";
+const TIMEOUT_MS = 30_000;
 
 export type ApologistMessage = {
   role: "user" | "assistant";
   content: string;
 };
 
-let _client: Anthropic | null = null;
+function getConfig() {
+  const apiKey = process.env.APOLOGIST_API_KEY;
+  const apiUrl = process.env.APOLOGIST_API_URL;
+  const modelId = process.env.APOLOGIST_MODEL_ID ?? "gpt-4o";
 
-function getClient(): Anthropic {
-  if (!_client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
-    _client = new Anthropic({ apiKey });
+  if (!apiKey || !apiUrl) {
+    throw new Error("APOLOGIST_API_KEY or APOLOGIST_API_URL is not configured");
   }
-  return _client;
+
+  const base = apiUrl.replace(/\/$/, "");
+  return { apiKey, base, modelId };
 }
 
 function buildSystemPrompt(prayerContext?: { topic: string; notes?: string }): string {
@@ -28,51 +30,111 @@ function buildSystemPrompt(prayerContext?: { topic: string; notes?: string }): s
   );
 }
 
-function getModel(): string {
-  return process.env.APOLOGIST_MODEL_ID ?? "claude-haiku-4-5-20251001";
-}
-
 export async function generatePrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }
 ): Promise<string> {
-  const response = await getClient().messages.create(
-    {
-      model: getModel(),
-      max_tokens: 512,
-      system: [
-        {
-          type: "text",
-          text: buildSystemPrompt(prayerContext),
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages,
-    },
-    { timeout: 30_000 }
-  );
+  const { apiKey, base, modelId } = getConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const block = response.content[0];
-  if (!block || block.type !== "text") {
-    throw new Error("Unexpected response format from Claude");
+  try {
+    const response = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [
+          { role: "system", content: buildSystemPrompt(prayerContext) },
+          ...messages,
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Apologist API returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new Error("Apologist API response contained no content");
+    }
+    return content;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Apologist API request timed out");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return block.text;
 }
 
 export function streamPrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }
-) {
-  return getClient().messages.stream({
-    model: getModel(),
-    max_tokens: 512,
-    system: [
-      {
-        type: "text",
-        text: buildSystemPrompt(prayerContext),
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages,
+): ReadableStream<string> {
+  const { apiKey, base, modelId } = getConfig();
+
+  return new ReadableStream({
+    async start(controller) {
+      const response = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: modelId,
+          stream: true,
+          messages: [
+            { role: "system", content: buildSystemPrompt(prayerContext) },
+            ...messages,
+          ],
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        controller.error(new Error(`Apologist API returned status ${response.status}`));
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") {
+              controller.close();
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed?.choices?.[0]?.delta?.content;
+              if (typeof text === "string" && text) {
+                controller.enqueue(text);
+              }
+            } catch {
+              // skip malformed SSE lines
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+        controller.close();
+      }
+    },
   });
 }

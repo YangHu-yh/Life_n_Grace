@@ -29,7 +29,7 @@ function textStream(text: string, headers?: Record<string, string>): Response {
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.APOLOGIST_API_KEY || !process.env.APOLOGIST_API_URL) {
     return NextResponse.json(
       { error: "The prayer companion is not yet available. Check back soon!" },
       { status: 503 }
@@ -71,20 +71,19 @@ export async function POST(request: NextRequest) {
       safeMessages.slice().reverse().find((m) => m.role === "user")?.content ?? "";
 
     try {
-      const sdkStream = streamPrayerChat(safeMessages, safePrayerContext);
+      const apologistStream = streamPrayerChat(safeMessages, safePrayerContext);
       const encoder = new TextEncoder();
       const readable = new ReadableStream({
         async start(controller) {
+          const reader = apologistStream.getReader();
           try {
-            for await (const chunk of sdkStream) {
-              if (
-                chunk.type === "content_block_delta" &&
-                chunk.delta.type === "text_delta"
-              ) {
-                controller.enqueue(encoder.encode(chunk.delta.text));
-              }
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              controller.enqueue(encoder.encode(value));
             }
           } finally {
+            reader.releaseLock();
             controller.close();
           }
         },

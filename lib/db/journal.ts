@@ -1,4 +1,7 @@
 import { PrismaClient } from "@/generated/journal";
+import { ensureEnv } from "@/lib/env";
+
+ensureEnv();
 
 const globalForJournal = globalThis as unknown as { prismaJournal?: PrismaClient };
 
