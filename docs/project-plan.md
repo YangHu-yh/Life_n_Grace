@@ -25,7 +25,7 @@ Life-n-Grace is a privacy-first Christian prayer companion app targeting beginne
 1. **Partners need a URL, not an auth system.** The existing JWT + bcrypt auth works end-to-end; demo accounts can be provisioned manually.
 2. **AWS workstream promoted P1 → P0.** CI/CD + deployment is now the critical path; it was previously gated behind the auth overhaul for no technical reason.
 3. **Auth workstream demoted P1 → P2.** Auth.js v5, email verification, Google OAuth, and SES move to post-demo. GDPR account-deletion (P1-AUTH-8) stays earlier because delete endpoints (P0-4) partially cover it.
-4. **Demo tier infrastructure.** Deploy a trimmed stack first (1 Fargate task, single RDS instance hosting both databases, no Multi-AZ, no CloudFront/WAF/SES, public-subnet tasks instead of NAT) at ~$45/month, with a documented upgrade path to the full production tier in [aws-cicd-spec.md](aws-cicd-spec.md). Both Prisma datasources keep separate connection strings — the two-database security boundary is preserved, they just share an instance for now.
+4. **Demo tier infrastructure = Lambda (decided 2026-07-04).** Deploy the same Docker image to **Lambda + Function URL** for demo/beta: compute rides Lambda's always-free tier (never expires), the Function URL provides HTTPS with no ALB or API Gateway, and a single RDS db.t4g.micro hosts both databases — **~$16/month total**. Fargate + ALB (no free tier, ~$52/month) becomes the **production tier at launch**; the swap is a CDK deploy-target change, not a re-architecture. App Runner was evaluated and rejected — AWS ended new-customer access 2026-04-30. Details in [aws-cicd-spec.md §0](aws-cicd-spec.md). Both Prisma datasources keep separate connection strings — the two-database security boundary is preserved, they just share an instance for now.
 5. **Companion AI stays on Apologist** (decision reversed from v2.0's P0-AI-2). The client was rewritten with timeout, URL normalization, SSE streaming, and error sanitization on 2026-07-03.
 
 **Demo-blocking security floor** (cannot skip even for a demo — the ALB URL is public internet):
@@ -93,9 +93,9 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 |---|------|--------|------|------|-----|------|
 | P0-AWS-1 | Create `Dockerfile` + `.dockerignore`; enable `output: "standalone"` in next.config.js | 10 | 10 | 8 | **9.3** | [aws-cicd-spec.md §2](aws-cicd-spec.md) |
 | P0-AWS-2 | GitHub Actions CI workflow: typecheck + lint + test + audit + Trivy scan (on PR) | 9 | 9 | 7 | **8.3** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
-| P0-AWS-3 | Scaffold **demo-tier** CDK stack (`infra/`): VPC, 1× Fargate task, 1× RDS instance (both DBs), ALB, Secrets Manager | 10 | 9 | 5 | **8.0** | [aws-cicd-spec.md §3](aws-cicd-spec.md) |
+| P0-AWS-3 | Scaffold **demo-tier** CDK stack (`infra/`): VPC, Lambda (container + Web Adapter) + Function URL, 1× RDS instance (both DBs), Secrets Manager | 10 | 9 | 6 | **8.3** | [aws-cicd-spec.md §0](aws-cicd-spec.md) |
 | P0-AWS-4 | AWS IAM OIDC role for GitHub Actions — no long-lived access keys | 8 | 10 | 7 | **8.3** | [aws-cicd-spec.md §6](aws-cicd-spec.md) |
-| P0-AWS-5 | GitHub Actions deploy workflow: build → push ECR → ECS rolling update (on merge) | 10 | 9 | 6 | **8.3** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
+| P0-AWS-5 | GitHub Actions deploy workflow: build → push ECR → `lambda update-function-code` (on merge) | 10 | 9 | 7 | **8.7** | [aws-cicd-spec.md §0](aws-cicd-spec.md) |
 | P0-AWS-6 | CDK deploy + populate Secrets Manager (JWT secret, encryption key, `APOLOGIST_*` vars) | 9 | 9 | 5 | **7.7** | [aws-cicd-spec.md §8](aws-cicd-spec.md) |
 | P0-AWS-7 | Update aws-cicd-spec env references: `ANTHROPIC_API_KEY`/`NEXTAUTH_*` → `APOLOGIST_API_KEY`/`APOLOGIST_API_URL`; mark SES/Google vars deferred | 7 | 10 | 9 | **8.7** | [aws-cicd-spec.md §8](aws-cicd-spec.md) |
 
@@ -202,18 +202,20 @@ Context: single-developer cadence, 1-week sprints. **Milestone: partner-demoable
 
 ---
 
-### Sprint 2 — AWS Demo Tier Live (Week 2) 🎯 DEMO MILESTONE
-**Goal:** `git push origin main` → app live on AWS at an HTTPS URL you can send to partners.
+### Sprint 2 — AWS Demo Tier Live on Lambda (Week 2) 🎯 DEMO MILESTONE
+**Goal:** `git push origin main` → app live on AWS at an HTTPS URL you can send to partners, at ~$16/month.
 
 | Item | Deliverable |
 |------|-------------|
-| P0-AWS-3 | Demo-tier CDK stack: VPC + 1 Fargate task + 1 RDS instance (both DBs) + ALB + Secrets Manager |
+| P0-AWS-3 | Demo-tier CDK stack: VPC + Lambda (container + Web Adapter, streaming) + Function URL + 1 RDS instance (both DBs) + Secrets Manager |
 | P0-AWS-4 | AWS IAM OIDC role (no long-lived keys) |
-| P0-AWS-5 | Deploy workflow: ECR push → ECS rolling update |
-| P0-AWS-6 | Secrets Manager populated (JWT, encryption key, `APOLOGIST_*`) |
-| — | Provision partner demo accounts manually; seed demo prayer data |
+| P0-AWS-5 | Deploy workflow: ECR push → `lambda update-function-code` |
+| P0-AWS-6 | Secrets populated (JWT, encryption key); `APOLOGIST_*` left **unset** until key provided → companion shows "not yet available" |
+| — | Prisma migrations run from CI; provision partner demo accounts manually; seed demo prayer data |
 
-**Definition of Done:** Merge to main auto-deploys. App live with HTTPS. Companion chat streams a real Apologist response in production. Partner can log in with a provisioned account on their phone.
+**Definition of Done:** Merge to main auto-deploys. App live at the Function URL with HTTPS. Partner can log in with a provisioned account on their phone. Compute bill: $0 (always-free tier).
+
+> **When the Apologist key arrives:** add NAT (t4g.nano instance ~$4/mo) for Lambda outbound internet, set `APOLOGIST_*` in Secrets Manager, redeploy — companion streams live.
 
 ---
 
@@ -311,6 +313,8 @@ Context: single-developer cadence, 1-week sprints. **Milestone: partner-demoable
 | R7 | Single-developer bus factor | High | Medium | **Accept** — document architecture; write tests |
 | R8 | Public demo URL exposed with minimal auth (no email verification, no MFA) | Medium | High | **Mitigate** — rate limiting (P0-2) before URL exists; manually provisioned demo accounts only; auth overhaul in Sprint 4 before any public signup push |
 | R9 | Demo-tier single-instance RDS = no failover during a partner demo | Low | Medium | **Accept** for demo period — 7-day backups on; upgrade to Multi-AZ in production-tier upgrade (Sprint 5+) |
+| R10 | Lambda cold start (~2–4s) on first request in front of a partner | Medium | Low | **Mitigate** — warm the app before handing over; provisioned concurrency (1 instance) for demo hours if needed |
+| R11 | Companion feature dark until Apologist key + NAT are added (Lambda has no outbound internet in VPC) | High (short-term) | Medium | **Accept** knowingly — route already returns a friendly "not yet available"; activation is a documented 3-step change (NAT, secrets, redeploy) |
 
 ---
 

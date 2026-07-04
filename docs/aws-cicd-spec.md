@@ -1,16 +1,67 @@
 # AWS Deployment + CI/CD Spec
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-07-04 (v1.0: 2026-05-06)  
-**Architecture pattern:** Three-Tier (ALB + ECS Fargate + RDS)  
+**Architecture pattern:** Demo/beta tier: **Lambda (container) + Function URL + RDS** · Production tier: Three-Tier (ALB + ECS Fargate + RDS)  
 
-> **v1.1 — Demo Tier First.** Per [project-plan.md v2.1](project-plan.md), deploy a trimmed **demo tier** before the full production architecture below:
-> - **1 Fargate task** (not 2), `desiredCount: 1`, autoscaling max 2
-> - **1 RDS instance** (db.t3.micro, single-AZ) hosting *both* `life_n_grace_main` and `life_n_grace_journal` databases — two connection strings preserved, `deletionProtection: false` acceptable for demo
-> - **Fargate tasks in public subnets with public IPs** — skips the NAT gateway (~$32/month saving)
-> - **Skip for demo:** CloudFront, WAF, SES (no email flows until auth sprint), Multi-AZ, Route 53 custom domain (ALB DNS name is fine for partner demos)
-> - **Demo-tier cost: ~$45/month** (Fargate ~$13, RDS ~$13, ALB ~$18, misc ~$1)
-> - Everything below remains the target **production tier**; upgrade when public traffic warrants (project-plan Sprint 5+).
+> **v1.2 — Compute decision (2026-07-04): Lambda for demo/beta.** ECS Fargate + ALB has no free tier (~$52/month from day one); AWS App Runner stopped accepting new customers 2026-04-30 (end of support — do not use). Lambda's always-free tier (1M requests + 400K GB-seconds/month, never expires) covers demo/beta compute entirely. The **same Docker image** is used in both tiers — only the deploy target changes at launch.
+
+---
+
+## 0. Demo/Beta Tier — Lambda + Function URL (ACTIVE)
+
+```
+Internet
+    │
+    ▼
+Lambda Function URL (built-in HTTPS, response streaming enabled)
+    │
+    ▼
+Lambda (Next.js standalone container + AWS Lambda Web Adapter)
+    │  in VPC, private subnets
+    ▼
+RDS PostgreSQL db.t4g.micro — single instance, single-AZ,
+hosting BOTH life_n_grace_main and life_n_grace_journal databases
+(two connection strings preserved — security boundary intact)
+```
+
+**Demo-tier cost (verified 2026-07-04):**
+
+| Service | Monthly |
+|---------|---------|
+| Lambda compute (demo traffic) | **$0** — inside always-free tier (1M req + 400K GB-s) |
+| Lambda Function URL (HTTPS) | **$0** — no charge; no ALB, no API Gateway needed |
+| RDS db.t4g.micro single-AZ ($0.016/hr) + 20GB gp3 + 7-day backups | ~$14 |
+| ECR + Secrets Manager + CloudWatch | ~$2 |
+| **Total** | **~$16/month** |
+
+**How the same Dockerfile serves both tiers** — add the AWS Lambda Web Adapter (official AWS layer) to the runner stage; it is inert when the container runs on ECS:
+
+```dockerfile
+# In the runner stage (see §2) — one added line:
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+# Enable SSE streaming for the companion route when on Lambda:
+ENV AWS_LWA_INVOKE_MODE=response_stream
+```
+
+**Demo-tier deploy step** (replaces the ECS rolling-update steps in §5 while on Lambda):
+
+```yaml
+      - name: Deploy to Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name life-n-grace-demo \
+            --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          aws lambda wait function-updated --function-name life-n-grace-demo
+```
+
+**Demo-tier notes:**
+- **Secrets:** injected as Lambda environment variables (KMS-encrypted at rest) from Secrets Manager at deploy time — no runtime Secrets Manager calls, no VPC endpoints needed.
+- **Networking staging:** Lambda sits in the VPC's private subnets to reach RDS. It has **no outbound internet** until a NAT exists — which is fine initially because `APOLOGIST_*` is unset (companion returns its "not yet available" message). **When the Apologist API key is provisioned:** add a NAT instance (t4g.nano, ~$4/month) or NAT gateway (~$32/month) so the companion can reach the Apologist endpoint.
+- **Cold starts:** ~2–4s first request (container init + 2 Prisma clients). Before a partner demo, load the app once to warm it. If needed on demo day, enable provisioned concurrency (1 instance) for the hour and turn it off after.
+- **Migrations:** run Prisma migrations from CI (GitHub Actions job with DB access via temporary security-group rule) or a one-off Lambda invocation — not at cold start.
+- **Skip for demo/beta:** ALB, NAT (until Apologist key), CloudFront, WAF, SES, Multi-AZ, custom domain (Function URL's `*.lambda-url.us-east-1.on.aws` is fine for partners).
+- **Launch = switch to production tier below:** same image, same ECR, same CI; the CDK swap is Lambda+Function URL → ECS service+ALB (§3), and RDS gains Multi-AZ + a second instance to physically separate the journal DB.
 
 **IaC approach:** AWS CDK (TypeScript) — type-safe, integrates with existing TS codebase  
 **Security framework:** ISO 27001:2022 — A.8.9 (config management), A.8.23 (web filtering), A.8.24 (cryptography)  
