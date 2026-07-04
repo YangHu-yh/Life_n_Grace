@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const token = await signAuthToken(user.id);
-    setAuthCookie(token);
+    await setAuthCookie(token);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[POST /api/auth/login]", error);

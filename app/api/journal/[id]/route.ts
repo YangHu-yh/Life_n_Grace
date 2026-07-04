@@ -5,7 +5,7 @@ import { decryptText, encryptText } from "@/lib/security/encryption";
 import type { Prisma } from "@/generated/journal";
 
 type RouteContext = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const journalId = context.params.id;
+  const { id: journalId } = await context.params;
   const existing = await prismaJournal.journalEntry.findUnique({
     where: { id: journalId }
   });
@@ -79,8 +79,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
+    const { id: journalId } = await context.params;
     const deleted = await prismaJournal.journalEntry.deleteMany({
-      where: { id: context.params.id, userId }
+      where: { id: journalId, userId }
     });
     if (deleted.count === 0) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });

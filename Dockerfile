@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
@@ -10,10 +10,14 @@ RUN npm run prisma:generate
 RUN npm run build
 
 # ---- Production stage ----
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# The standalone server only needs the node binary. Removing npm (and the
+# tar/sigstore packages it vendors) eliminates their CVEs from image scans.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn*
 
 # AWS Lambda Web Adapter — inert outside Lambda, lets the same image run
 # on Lambda (demo/beta tier) and ECS Fargate (production tier).

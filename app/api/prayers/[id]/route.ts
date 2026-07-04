@@ -4,7 +4,7 @@ import { prismaJournal } from "@/lib/db/journal";
 import { getUserIdFromRequest } from "@/lib/auth";
 
 type RouteContext = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
@@ -14,7 +14,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const prayerId = context.params.id;
+    const { id: prayerId } = await context.params;
     const deleted = await prismaMain.prayerRequest.deleteMany({
       where: { id: prayerId, userId }
     });

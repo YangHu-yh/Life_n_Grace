@@ -41,8 +41,9 @@ export async function getUserIdFromRequest(request: NextRequest) {
   }
 }
 
-export function setAuthCookie(token: string) {
-  cookies().set(TOKEN_COOKIE, token, {
+export async function setAuthCookie(token: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -51,8 +52,9 @@ export function setAuthCookie(token: string) {
   });
 }
 
-export function clearAuthCookie() {
-  cookies().set(TOKEN_COOKIE, "", {
+export async function clearAuthCookie() {
+  const cookieStore = await cookies();
+  cookieStore.set(TOKEN_COOKIE, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
