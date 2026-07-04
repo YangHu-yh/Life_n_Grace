@@ -1,7 +1,7 @@
 # Life-n-Grace — Project Plan
 
-**Version:** 2.0  
-**Date:** 2026-05-06  
+**Version:** 2.1 — Demo-First Reprioritization  
+**Date:** 2026-07-04 (v2.0: 2026-05-06)  
 **Status:** Active  
 **Methodology:** Kanban sprints (1-week iterations), ICE prioritization, MoSCoW classification  
 **Spec documents:** [auth-spec.md](auth-spec.md) · [apologist-fix-spec.md](apologist-fix-spec.md) · [aws-cicd-spec.md](aws-cicd-spec.md) · [technical-spec.md](technical-spec.md)
@@ -13,18 +13,35 @@
 Life-n-Grace is a privacy-first Christian prayer companion app targeting beginner and everyday believers. The core value props are a kanban prayer wall, AES-256-GCM encrypted journals, habit streak tracking, and an AI prayer companion.
 
 **Current RAG Status:** 🟡 Amber  
-**Composite health score:** 62/100  
-**Reason:** Security gaps (no rate limiting, committed secrets), companion AI broken with placeholder config, no email verification, no OAuth, no production deployment path.
+**Composite health score:** 70/100 (was 62 — P0-1 secrets validation, P0-3 error sanitization, and companion API fixes shipped)  
+**Reason:** No deployment path yet; no rate limiting; auth is functional but minimal (no email verification/OAuth).
 
-**Goal of this plan:** Fix companion AI immediately (P0), resolve security gaps + ship email verification + Google OAuth within 2 weeks, have CI/CD pipeline + AWS deployment ready by week 4, ship mobile-ready v1.0 by week 8.
+**Goal of this plan (v2.1):** Get a running service on AWS via GitHub Actions CI/CD **as fast as possible** so the product can be demoed to partners. Auth overhaul (email verification + Google OAuth) is explicitly **deferred until after the demo milestone** — the existing JWT auth is sufficient for partner demos.
 
-### New Workstreams Added (v2.0)
+### v2.1 Reprioritization — Demo-First Strategy
+
+**Decision (2026-07-04):** Deploy-first, auth-later. Rationale:
+
+1. **Partners need a URL, not an auth system.** The existing JWT + bcrypt auth works end-to-end; demo accounts can be provisioned manually.
+2. **AWS workstream promoted P1 → P0.** CI/CD + deployment is now the critical path; it was previously gated behind the auth overhaul for no technical reason.
+3. **Auth workstream demoted P1 → P2.** Auth.js v5, email verification, Google OAuth, and SES move to post-demo. GDPR account-deletion (P1-AUTH-8) stays earlier because delete endpoints (P0-4) partially cover it.
+4. **Demo tier infrastructure.** Deploy a trimmed stack first (1 Fargate task, single RDS instance hosting both databases, no Multi-AZ, no CloudFront/WAF/SES, public-subnet tasks instead of NAT) at ~$45/month, with a documented upgrade path to the full production tier in [aws-cicd-spec.md](aws-cicd-spec.md). Both Prisma datasources keep separate connection strings — the two-database security boundary is preserved, they just share an instance for now.
+5. **Companion AI stays on Apologist** (decision reversed from v2.0's P0-AI-2). The client was rewritten with timeout, URL normalization, SSE streaming, and error sanitization on 2026-07-03.
+
+**Demo-blocking security floor** (cannot skip even for a demo — the ALB URL is public internet):
+- Rate limiting on auth endpoints (P0-2)
+- DELETE endpoints for user-owned data (P0-4)
+- No secrets in code or CI logs (done — `lib/env.ts` validates at startup)
+
+### Workstream Priorities (v2.1)
 
 | Workstream | Spec | Priority |
 |-----------|------|---------|
-| Fix Apologist/companion AI API | [apologist-fix-spec.md](apologist-fix-spec.md) | **P0** — feature is broken |
-| Email verification + Google OAuth | [auth-spec.md](auth-spec.md) | **P1** — required before any user acquisition |
-| AWS deployment + GitHub Actions CI/CD | [aws-cicd-spec.md](aws-cicd-spec.md) | **P1** — required for production |
+| AWS demo-tier deployment + GitHub Actions CI/CD | [aws-cicd-spec.md](aws-cicd-spec.md) | **P0** — critical path to partner demo |
+| Remaining security floor (rate limit, DELETE endpoints) | — | **P0** — ships with or before public URL |
+| Demo polish (loading states, error boundary, mobile touch) | — | **P1** — what partners actually see |
+| Email verification + Google OAuth | [auth-spec.md](auth-spec.md) | **P2** — deferred to post-demo |
+| ~~Fix Apologist/companion AI API~~ | [apologist-fix-spec.md](apologist-fix-spec.md) | ✅ Done 2026-07-03 (stayed on Apologist) |
 
 ---
 
@@ -50,31 +67,43 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 
 ## 3. Full Backlog — Prioritized
 
-### P0 — Companion AI Fix (Must Have, ship today)
+### ✅ P0 — Companion AI Fix (DONE 2026-07-03)
+
+| # | Item | Status |
+|---|------|--------|
+| P0-AI-1 | Fix Apologist model ID default (`"openai/gpt/4o"` → `"gpt-4o"`), AbortController timeout, error sanitization, URL normalization, SSE streaming | ✅ Shipped (commit `837dfb4`) |
+| ~~P0-AI-2~~ | ~~Migrate companion to Anthropic Claude API~~ | ❌ Reversed — staying on Apologist (product decision, v2.1) |
+
+---
+
+### P0 — Security Floor (Must Have, ships with or before public URL)
+
+| # | Item | Impact | Conf | Ease | ICE | Status |
+|---|------|--------|------|------|-----|--------|
+| P0-1 | Startup env validation (`lib/env.ts`); no committed secrets; placeholder detection | 10 | 10 | 10 | **10.0** | ✅ Done (commit `837dfb4`) |
+| P0-2 | Add rate limiting to `/api/auth/login` and `/api/auth/signup` | 10 | 9 | 7 | **8.7** | ⬜ Sprint 1 |
+| P0-3 | Stop leaking `error.message` in 500 responses across all routes | 8 | 10 | 9 | **9.0** | ✅ Done for auth routes (commit `63813d0`); verify remaining routes in Sprint 1 |
+| P0-4 | Add `DELETE /api/prayers/[id]` and `DELETE /api/journal/[id]` endpoints | 7 | 10 | 8 | **8.3** | ⬜ Sprint 1 |
+
+---
+
+### P0 — AWS Demo Deployment + CI/CD (Must Have, weeks 1–2) ⬆ promoted from P1
 
 | # | Item | Impact | Conf | Ease | ICE | Spec |
 |---|------|--------|------|------|-----|------|
-| P0-AI-1 | Fix Apologist model ID default (`"openai/gpt/4o"` → `"gpt-4o"`), add AbortController timeout, sanitize errors | 9 | 10 | 9 | **9.3** | [apologist-fix-spec.md §3](apologist-fix-spec.md) |
-| P0-AI-2 | Migrate companion to Anthropic Claude API (Option B — recommended) | 9 | 9 | 7 | **8.3** | [apologist-fix-spec.md §4](apologist-fix-spec.md) |
+| P0-AWS-1 | Create `Dockerfile` + `.dockerignore`; enable `output: "standalone"` in next.config.js | 10 | 10 | 8 | **9.3** | [aws-cicd-spec.md §2](aws-cicd-spec.md) |
+| P0-AWS-2 | GitHub Actions CI workflow: typecheck + lint + test + audit + Trivy scan (on PR) | 9 | 9 | 7 | **8.3** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
+| P0-AWS-3 | Scaffold **demo-tier** CDK stack (`infra/`): VPC, 1× Fargate task, 1× RDS instance (both DBs), ALB, Secrets Manager | 10 | 9 | 5 | **8.0** | [aws-cicd-spec.md §3](aws-cicd-spec.md) |
+| P0-AWS-4 | AWS IAM OIDC role for GitHub Actions — no long-lived access keys | 8 | 10 | 7 | **8.3** | [aws-cicd-spec.md §6](aws-cicd-spec.md) |
+| P0-AWS-5 | GitHub Actions deploy workflow: build → push ECR → ECS rolling update (on merge) | 10 | 9 | 6 | **8.3** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
+| P0-AWS-6 | CDK deploy + populate Secrets Manager (JWT secret, encryption key, `APOLOGIST_*` vars) | 9 | 9 | 5 | **7.7** | [aws-cicd-spec.md §8](aws-cicd-spec.md) |
+| P0-AWS-7 | Update aws-cicd-spec env references: `ANTHROPIC_API_KEY`/`NEXTAUTH_*` → `APOLOGIST_API_KEY`/`APOLOGIST_API_URL`; mark SES/Google vars deferred | 7 | 10 | 9 | **8.7** | [aws-cicd-spec.md §8](aws-cicd-spec.md) |
 
-> P0-AI-2 unlocks prompt caching (lower cost), streaming, and removes dependency on the placeholder `APOLOGIST_API_URL`.
-
----
-
-### P0 — Security & Data Integrity (Must Have, ship this week)
-
-| # | Item | Impact | Conf | Ease | ICE | Sprint |
-|---|------|--------|------|------|-----|--------|
-| P0-1 | Rotate JWT secret + encryption key; replace `.env` values with placeholder strings | 10 | 10 | 10 | **10.0** | S1 |
-| P0-2 | Add rate limiting to `/api/auth/login` and `/api/auth/signup` | 10 | 9 | 7 | **8.7** | S1 |
-| P0-3 | Stop leaking `error.message` in 500 responses across all routes | 8 | 10 | 9 | **9.0** | S1 |
-| P0-4 | Add `DELETE /api/prayers/[id]` and `DELETE /api/journal/[id]` endpoints | 7 | 10 | 8 | **8.3** | S1 |
-
-> **Risk note:** P0-1 is a critical financial/privacy risk. If the `.env` file was ever pushed to a remote repository, treat it as a confirmed breach — rotate immediately regardless of any other priority.
+> **Deferred from this workstream:** SES setup (P1-AWS-3 in v2.0) moves to the auth sprint — no email flows exist until email verification ships. CloudFront, WAF, and Multi-AZ move to the production-tier upgrade.
 
 ---
 
-### P1 — Auth: Email Verification + Google OAuth (Must Have, weeks 1–2)
+### P2 — Auth: Email Verification + Google OAuth ⬇ demoted from P1 (post-demo)
 
 | # | Item | Impact | Conf | Ease | ICE | Spec |
 |---|------|--------|------|------|-----|------|
@@ -87,30 +116,18 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 | P1-AUTH-7 | Update middleware.ts to use Auth.js middleware export | 7 | 10 | 8 | **8.3** | [auth-spec.md §10](auth-spec.md) |
 | P1-AUTH-8 | Implement account deletion endpoint (`DELETE /api/auth/account`) — GDPR Art. 17 | 8 | 10 | 7 | **8.3** | [auth-spec.md §13](auth-spec.md) |
 
-> **GDPR note:** Prayer content is religious beliefs data (Art. 9 special category). Email verification confirms user identity before storing any personal data. Account deletion is mandatory before any EU launch.
+> **GDPR note:** Prayer content is religious beliefs data (Art. 9 special category). Email verification confirms user identity before storing any personal data. Account deletion is mandatory before any EU launch — but P0-4 DELETE endpoints cover the demo period, since demo accounts are provisioned manually for partners, not acquired publicly.
+
+> **Also lands here:** AWS SES setup (formerly P1-AWS-3) — verify domain, production access, DKIM. No email flows exist until this sprint.
 
 ---
 
-### P1 — AWS Deployment + CI/CD (Must Have, weeks 2–3)
-
-| # | Item | Impact | Conf | Ease | ICE | Spec |
-|---|------|--------|------|------|-----|------|
-| P1-AWS-1 | Create `Dockerfile` + `.dockerignore`; enable `output: "standalone"` in next.config.js | 8 | 10 | 8 | **8.7** | [aws-cicd-spec.md §2](aws-cicd-spec.md) |
-| P1-AWS-2 | Scaffold AWS CDK stack (`infra/`): VPC, ECS Fargate, RDS × 2, ALB, Secrets Manager | 9 | 9 | 4 | **7.3** | [aws-cicd-spec.md §3](aws-cicd-spec.md) |
-| P1-AWS-3 | Configure AWS SES: verify domain, request production access, set up DKIM | 8 | 9 | 5 | **7.3** | [aws-cicd-spec.md §4](aws-cicd-spec.md) |
-| P1-AWS-4 | GitHub Actions CI workflow: typecheck + lint + test + security audit + Trivy scan (on PR) | 9 | 9 | 7 | **8.3** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
-| P1-AWS-5 | GitHub Actions deploy workflow: build → push ECR → ECS rolling update (on merge to main) | 9 | 9 | 6 | **8.0** | [aws-cicd-spec.md §5](aws-cicd-spec.md) |
-| P1-AWS-6 | AWS IAM OIDC role for GitHub Actions — no long-lived access keys | 8 | 10 | 7 | **8.3** | [aws-cicd-spec.md §6](aws-cicd-spec.md) |
-| P1-AWS-7 | CDK deploy + populate all Secrets Manager values | 8 | 9 | 5 | **7.3** | [aws-cicd-spec.md §8](aws-cicd-spec.md) |
-
----
-
-### P1 — Architecture Stability (Must Have, weeks 2–3)
+### P1 — Architecture Stability (weeks 3–4)
 
 | # | Item | Impact | Conf | Ease | ICE | Sprint |
 |---|------|--------|------|------|-----|--------|
 | P1-1 | Extract `VALID_LANES`, `LANE_TO_LEGACY_STAGE`, `LEGACY_STAGE_TO_LANE` to `lib/prayers/constants.ts` | 6 | 10 | 9 | **8.3** | S2 |
-| P1-2 | Add `lib/env.ts` with zod validation of all required env vars at startup | 7 | 9 | 8 | **8.0** | S2 |
+| P1-2 | ~~Add `lib/env.ts` with validation of all required env vars at startup~~ ✅ Done (commit `837dfb4`, plain TS — zod optional later) | 7 | 9 | 8 | **8.0** | ✅ |
 | P1-3 | Add `middleware.ts` for route-level auth protection (redirect unauthenticated users away from `/prayers`, `/companion`, `/profile`) | 8 | 9 | 7 | **8.0** | S2 |
 | P1-4 | Split `PATCH /api/prayers` into `PATCH /api/prayers/[id]` (lane update) + `POST /api/prayers/[id]/prayed` (prayer event) | 7 | 9 | 6 | **7.3** | S2 |
 | P1-5 | Add `limit` + `cursor` pagination to `GET /api/prayers`, `GET /api/journal` | 7 | 8 | 6 | **7.0** | S3 |
@@ -165,73 +182,73 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 
 ---
 
-## 4. Sprint Plan
+## 4. Sprint Plan (v2.1 — Demo-First)
 
-Context: single-developer cadence, 1-week sprints.
+Context: single-developer cadence, 1-week sprints. **Milestone: partner-demoable URL at end of Sprint 2.**
 
-### Sprint 1 — Fix Companion + Security Hardening (Week 1)
-**Goal:** Companion works. App is safe to deploy publicly.
+### Sprint 1 — Containerize + CI + Security Floor (Week 1)
+**Goal:** App builds as a container; every PR is quality-gated; safe to expose publicly.
 
 | Item | Deliverable |
 |------|-------------|
-| P0-AI-1 | Fix Apologist API: model ID, timeout, error sanitization |
-| P0-AI-2 | Migrate to Anthropic Claude API |
-| P0-1 | Rotate secrets; replace `.env` with placeholder-only values |
+| P0-AWS-1 | Dockerfile + `.dockerignore` + standalone Next.js output |
+| P0-AWS-2 | GitHub Actions CI: typecheck + lint + test + audit + Trivy |
+| P0-AWS-7 | aws-cicd-spec env vars corrected (`APOLOGIST_*`, defer SES/Google) |
 | P0-2 | Rate limiting on auth endpoints |
-| P0-3 | Sanitize all 500 error responses |
 | P0-4 | DELETE endpoints for prayers and journals |
+| P0-3 | Verify error sanitization on remaining (non-auth) routes |
 
-**Definition of Done:** Companion chat returns a real response. No credentials in committed files. Auth endpoints return 429 under brute-force load.
+**Definition of Done:** `docker build` succeeds locally and container runs against local Postgres. CI passes on a test PR. Auth endpoints return 429 under brute-force load.
 
 ---
 
-### Sprint 2 — Auth Overhaul (Week 2)
-**Goal:** Email verification working; Google sign-in working.
+### Sprint 2 — AWS Demo Tier Live (Week 2) 🎯 DEMO MILESTONE
+**Goal:** `git push origin main` → app live on AWS at an HTTPS URL you can send to partners.
 
 | Item | Deliverable |
 |------|-------------|
-| P1-AUTH-2 | Prisma schema updated (emailVerified, Account, Session, VerificationToken) |
-| P1-AUTH-1 | Auth.js v5 installed and configured |
-| P1-AUTH-3 | Email verification flow (signup → email → verify endpoint) |
-| P1-AUTH-4 | `lib/email.ts` with Resend |
-| P1-AUTH-5 | Google OAuth provider + login button |
-| P1-AUTH-6 | All API routes updated to use Auth.js session |
-| P1-AUTH-7 | Middleware updated |
-| P1-AUTH-8 | Account deletion endpoint |
+| P0-AWS-3 | Demo-tier CDK stack: VPC + 1 Fargate task + 1 RDS instance (both DBs) + ALB + Secrets Manager |
+| P0-AWS-4 | AWS IAM OIDC role (no long-lived keys) |
+| P0-AWS-5 | Deploy workflow: ECR push → ECS rolling update |
+| P0-AWS-6 | Secrets Manager populated (JWT, encryption key, `APOLOGIST_*`) |
+| — | Provision partner demo accounts manually; seed demo prayer data |
+
+**Definition of Done:** Merge to main auto-deploys. App live with HTTPS. Companion chat streams a real Apologist response in production. Partner can log in with a provisioned account on their phone.
+
+---
+
+### Sprint 3 — Demo Polish (Week 3)
+**Goal:** The demo *feels* good — especially on a partner's phone.
+
+| Item | Deliverable |
+|------|-------------|
+| P2-3 | Touch-friendly prayer card interaction (tap-to-select → tap-lane-to-move) |
+| P2-5 | Loading/disabled states on all submit buttons |
+| P2-6 | Error boundary in the frontend |
+| P1-3 | Route-level auth middleware (redirect unauthenticated users) |
+| P1-6 | Input length validation |
+| P3-7 | Privacy policy content review (partners will ask) |
+
+**Definition of Done:** Prayer wall fully usable on mobile Safari/Chrome. No dead-end error screens. Policy page credible.
+
+---
+
+### Sprint 4 — Auth Overhaul (Week 4, post-demo)
+**Goal:** Email verification working; Google sign-in working. (Moved from v2.0 Sprint 2.)
+
+| Item | Deliverable |
+|------|-------------|
+| P2-AUTH-2 | Prisma schema updated (emailVerified, Account, Session, VerificationToken) |
+| P2-AUTH-1 | Auth.js v5 installed and configured |
+| P2-AUTH-3 | Email verification flow (signup → email → verify endpoint) |
+| P2-AUTH-4 | `lib/email.ts` with Resend (dev) + SES (prod) |
+| — | AWS SES: domain verified, production access, DKIM |
+| P2-AUTH-5 | Google OAuth provider + login button |
+| P2-AUTH-6 | All API routes updated to use Auth.js session |
+| P2-AUTH-7 | Middleware updated |
+| P2-AUTH-8 | Account deletion endpoint |
 
 **Definition of Done:** New user signs up → receives verification email → clicks link → account activated → can log in with email or Google.
-
----
-
-### Sprint 3 — Docker + CI Pipeline (Week 3)
-**Goal:** App runs in a container; every PR is quality-gated.
-
-| Item | Deliverable |
-|------|-------------|
-| P1-AWS-1 | Dockerfile + standalone Next.js output |
-| P1-AWS-4 | GitHub Actions CI: typecheck + lint + test + audit + Trivy |
-| P1-1 | `lib/prayers/constants.ts` extracted |
-| P1-2 | `lib/env.ts` zod validation |
-| P1-6 | Input length validation |
-| P2-5 | Loading/disabled states on buttons |
-
-**Definition of Done:** `docker build` succeeds locally. Every PR triggers the CI workflow. All quality checks pass.
-
----
-
-### Sprint 4 — AWS Infrastructure + Deploy (Week 4)
-**Goal:** App runs on AWS; GitHub merges auto-deploy.
-
-| Item | Deliverable |
-|------|-------------|
-| P1-AWS-2 | CDK stack: VPC + ECS Fargate + RDS × 2 + ALB + Secrets Manager |
-| P1-AWS-3 | AWS SES configured (domain verified + production access) |
-| P1-AWS-5 | GitHub Actions deploy workflow (ECR push → ECS rolling update) |
-| P1-AWS-6 | AWS IAM OIDC role (no long-lived keys) |
-| P1-AWS-7 | All Secrets Manager values populated |
-| P1-3 | Auth middleware (protected routes) |
-
-**Definition of Done:** `git push origin main` → CI passes → Docker image pushed to ECR → ECS deploys → app live at production URL with HTTPS.
 
 ---
 
@@ -245,8 +262,8 @@ Context: single-developer cadence, 1-week sprints.
 | P1-7 | PrayerStage enum retired |
 | P1-8 | SWR replaces manual fetch/useEffect |
 | P2-1 | `prayers/page.tsx` decomposed into sub-components |
-| P2-6 | Error boundary |
 | P2-7 | Overview endpoint bounded (take: 200) |
+| — | Production-tier infra upgrade: Multi-AZ RDS, 2nd Fargate task, CloudFront, WAF (as user traffic warrants) |
 
 **Definition of Done:** `tsc --noEmit` passes. No component file >300 lines. Overview endpoint response time <500ms.
 
@@ -285,13 +302,15 @@ Context: single-developer cadence, 1-week sprints.
 
 | ID | Risk | Probability | Impact | Score | Response |
 |----|------|------------|--------|-------|---------|
-| R1 | Committed secrets already scraped by bots | High | Critical | **Avoid** — rotate immediately | P0-1 is blocking |
+| R1 | ~~Committed secrets already scraped by bots~~ | — | — | ✅ **Closed 2026-07-03** — git history verified clean; `lib/env.ts` blocks placeholder values at startup |
 | R2 | LLM API costs spiral with user growth (no token budget) | Medium | High | **Mitigate** — add per-user usage tracking before P3-3 |
 | R3 | Overview endpoint causes DB timeouts as data grows | Medium | Medium | **Mitigate** — P2-7 pagination caps queries |
-| R4 | Mobile drag-and-drop breaks core prayer wall UX | High | High | **Mitigate** — P2-3 touch alternative |
-| R5 | No social login = high signup abandonment at launch | High | High | **Mitigate** — P3-2 before v1 launch |
-| R6 | GDPR/CCPA noncompliance (no delete flow, no privacy policy) | Medium | High | **Mitigate** — P0-4 (delete) + P3-7 (policy) |
+| R4 | Mobile drag-and-drop breaks core prayer wall UX during partner demos | High | High | **Mitigate** — P2-3 touch alternative moved into Sprint 3 (pre-demo-polish) |
+| R5 | No social login = high signup abandonment at launch | High | High | **Mitigate** — P3-2 before public v1 launch (not needed for demos) |
+| R6 | GDPR/CCPA noncompliance (no delete flow, no privacy policy) | Medium | High | **Mitigate** — P0-4 (delete) in Sprint 1 + P3-7 (policy) in Sprint 3 |
 | R7 | Single-developer bus factor | High | Medium | **Accept** — document architecture; write tests |
+| R8 | Public demo URL exposed with minimal auth (no email verification, no MFA) | Medium | High | **Mitigate** — rate limiting (P0-2) before URL exists; manually provisioned demo accounts only; auth overhaul in Sprint 4 before any public signup push |
+| R9 | Demo-tier single-instance RDS = no failover during a partner demo | Low | Medium | **Accept** for demo period — 7-day backups on; upgrade to Multi-AZ in production-tier upgrade (Sprint 5+) |
 
 ---
 

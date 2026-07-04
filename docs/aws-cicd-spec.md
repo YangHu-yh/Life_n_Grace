@@ -1,8 +1,17 @@
 # AWS Deployment + CI/CD Spec
 
-**Version:** 1.0  
-**Date:** 2026-05-06  
+**Version:** 1.1  
+**Date:** 2026-07-04 (v1.0: 2026-05-06)  
 **Architecture pattern:** Three-Tier (ALB + ECS Fargate + RDS)  
+
+> **v1.1 — Demo Tier First.** Per [project-plan.md v2.1](project-plan.md), deploy a trimmed **demo tier** before the full production architecture below:
+> - **1 Fargate task** (not 2), `desiredCount: 1`, autoscaling max 2
+> - **1 RDS instance** (db.t3.micro, single-AZ) hosting *both* `life_n_grace_main` and `life_n_grace_journal` databases — two connection strings preserved, `deletionProtection: false` acceptable for demo
+> - **Fargate tasks in public subnets with public IPs** — skips the NAT gateway (~$32/month saving)
+> - **Skip for demo:** CloudFront, WAF, SES (no email flows until auth sprint), Multi-AZ, Route 53 custom domain (ALB DNS name is fine for partner demos)
+> - **Demo-tier cost: ~$45/month** (Fargate ~$13, RDS ~$13, ALB ~$18, misc ~$1)
+> - Everything below remains the target **production tier**; upgrade when public traffic warrants (project-plan Sprint 5+).
+
 **IaC approach:** AWS CDK (TypeScript) — type-safe, integrates with existing TS codebase  
 **Security framework:** ISO 27001:2022 — A.8.9 (config management), A.8.23 (web filtering), A.8.24 (cryptography)  
 **Privacy framework:** GDPR Art. 32 — appropriate technical security measures
@@ -222,10 +231,10 @@ export class LifeNGraceStack extends cdk.Stack {
       secretObjectValue: {
         AUTH_JWT_SECRET:        cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
         JOURNAL_ENCRYPTION_KEY: cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
-        GOOGLE_CLIENT_ID:       cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
-        GOOGLE_CLIENT_SECRET:   cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
-        NEXTAUTH_SECRET:        cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
-        ANTHROPIC_API_KEY:      cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
+        APOLOGIST_API_KEY:      cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
+        APOLOGIST_API_URL:      cdk.SecretValue.unsafePlainText("REPLACE_AFTER_DEPLOY"),
+        // Deferred to auth sprint (project-plan v2.1 Sprint 4):
+        // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NEXTAUTH_SECRET
       },
     })
 
@@ -259,18 +268,16 @@ export class LifeNGraceStack extends cdk.Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "app", logGroup }),
       environment: {
         NODE_ENV: "production",
-        EMAIL_PROVIDER: "ses",
         AWS_REGION: this.region,
-        NEXTAUTH_URL: "https://lifengrace.com",   // update to real domain
+        APOLOGIST_MODEL_ID: "gpt-4o",
         APOLOGIST_TRANSLATION: "esv",
+        // Deferred to auth sprint: EMAIL_PROVIDER=ses, NEXTAUTH_URL
       },
       secrets: {
         AUTH_JWT_SECRET:        ecs.Secret.fromSecretsManager(appSecrets, "AUTH_JWT_SECRET"),
         JOURNAL_ENCRYPTION_KEY: ecs.Secret.fromSecretsManager(appSecrets, "JOURNAL_ENCRYPTION_KEY"),
-        GOOGLE_CLIENT_ID:       ecs.Secret.fromSecretsManager(appSecrets, "GOOGLE_CLIENT_ID"),
-        GOOGLE_CLIENT_SECRET:   ecs.Secret.fromSecretsManager(appSecrets, "GOOGLE_CLIENT_SECRET"),
-        NEXTAUTH_SECRET:        ecs.Secret.fromSecretsManager(appSecrets, "NEXTAUTH_SECRET"),
-        ANTHROPIC_API_KEY:      ecs.Secret.fromSecretsManager(appSecrets, "ANTHROPIC_API_KEY"),
+        APOLOGIST_API_KEY:      ecs.Secret.fromSecretsManager(appSecrets, "APOLOGIST_API_KEY"),
+        APOLOGIST_API_URL:      ecs.Secret.fromSecretsManager(appSecrets, "APOLOGIST_API_URL"),
         MAIN_DATABASE_URL:      ecs.Secret.fromSecretsManager(mainDbSecret),
         JOURNAL_DATABASE_URL:   ecs.Secret.fromSecretsManager(journalDbSecret),
       },
@@ -590,20 +597,29 @@ Alternatively, run migrations as a separate ECS task definition (`life-n-grace-m
 
 All secrets stored in AWS Secrets Manager. `REPLACE_AFTER_DEPLOY` values must be updated after first CDK deploy.
 
+**Demo tier (required now):**
+
 | Variable | Source | Notes |
 |----------|--------|-------|
 | `MAIN_DATABASE_URL` | Secrets Manager (auto-generated) | Built from RDS secret |
-| `JOURNAL_DATABASE_URL` | Secrets Manager (auto-generated) | Built from RDS secret |
-| `AUTH_JWT_SECRET` | Secrets Manager | `openssl rand -hex 32` |
-| `JOURNAL_ENCRYPTION_KEY` | Secrets Manager | `openssl rand -hex 32` |
+| `JOURNAL_DATABASE_URL` | Secrets Manager (auto-generated) | Built from RDS secret (same instance, different database, demo tier) |
+| `AUTH_JWT_SECRET` | Secrets Manager | `openssl rand -hex 32` — `lib/env.ts` enforces ≥32 chars |
+| `JOURNAL_ENCRYPTION_KEY` | Secrets Manager | `openssl rand -hex 32` — `lib/env.ts` enforces exactly 32 bytes hex |
+| `APOLOGIST_API_KEY` | Secrets Manager | Apologist Fusion API key |
+| `APOLOGIST_API_URL` | Secrets Manager | e.g. `https://my.gospel.bot/api/v1` |
+| `APOLOGIST_MODEL_ID` | Container env | `gpt-4o` |
+| `APOLOGIST_TRANSLATION` | Container env | `esv` |
+| `AWS_REGION` | Container env | `us-east-1` |
+
+**Deferred to auth sprint (project-plan v2.1 Sprint 4):**
+
+| Variable | Source | Notes |
+|----------|--------|-------|
 | `NEXTAUTH_SECRET` | Secrets Manager | `openssl rand -hex 32` |
 | `GOOGLE_CLIENT_ID` | Secrets Manager | From Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Secrets Manager | From Google Cloud Console |
-| `ANTHROPIC_API_KEY` | Secrets Manager | From console.anthropic.com |
 | `NEXTAUTH_URL` | Container env | `https://yourdomain.com` |
 | `EMAIL_PROVIDER` | Container env | `ses` |
-| `AWS_REGION` | Container env | `us-east-1` |
-| `APOLOGIST_TRANSLATION` | Container env | `esv` |
 
 ---
 
