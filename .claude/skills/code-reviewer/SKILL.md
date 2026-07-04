@@ -127,6 +127,55 @@ python scripts/review_report_generator.py . \
 
 ---
 
+## Large Change Overview Format
+
+When a commit or PR touches **≥5 files** or **≥100 total lines changed**, output a categorized diff overview instead of a flat file list. This format groups related files into semantic categories, surfaces the key logic changes per category, and makes the diff scannable without reading every hunk.
+
+### Output structure
+
+**1. Stats bar** — total files, `+insertions`, `−deletions` across the whole commit.
+
+**2. Category summary table** — one row per semantic grouping, always with these four columns:
+
+| Category | Files | What changed | Lines |
+|----------|-------|--------------|-------|
+| `<badge label>` | primary file(s), secondary count | one-sentence description of the intent | `+N −M` |
+
+Rules for the Lines column:
+- Sum `git diff --numstat` values for all files in the category.
+- Show `+N` in green and `−M` in red; omit `−0`.
+- Use `font-variant-numeric: tabular-nums` when rendered in HTML.
+
+**3. Per-category diff cards** — for each category, show only the highest-signal hunks:
+- The key before/after lines that explain *why* the change was made (not every modified line).
+- Annotate with inline comments where the intent would not be obvious from the diff alone.
+- Skip mechanical changes (import reorders, whitespace) unless they are the point.
+
+### Trigger threshold
+
+| Condition | Action |
+|-----------|--------|
+| < 5 files AND < 100 lines | Flat file list with inline stat is sufficient |
+| ≥ 5 files OR ≥ 100 lines | Use category table + diff cards |
+| ≥ 10 files OR ≥ 300 lines | Add rendered artifact (HTML diff overview) |
+
+### Category badge vocabulary
+
+Use consistent labels so the reader builds a mental model across sessions:
+
+| Badge | Stripe color | When to use |
+|-------|-------------|-------------|
+| `Security` | amber | Auth, secrets, rate limiting, input validation |
+| `AI` | green | LLM client, prompt construction, streaming |
+| `Route` | blue | API route handlers (`app/api/**`) |
+| `Config` | purple | env files, package.json, next.config.js, zappa_settings |
+| `Schema` | teal | Prisma migrations, model changes |
+| `UI` | pink | React components, pages, styles |
+| `Infra` | red | Dockerfile, CDK, CI/CD workflows |
+| `Pre-existing` | grey | Files on branch but not changed in this commit |
+
+---
+
 ## Reference Guides
 
 ### Code Review Checklist
