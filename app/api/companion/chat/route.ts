@@ -71,7 +71,9 @@ export async function POST(request: NextRequest) {
       safeMessages.slice().reverse().find((m) => m.role === "user")?.content ?? "";
 
     try {
-      const apologistStream = streamPrayerChat(safeMessages, safePrayerContext);
+      // Awaiting here means upstream connection failures reject before any
+      // response bytes are sent — the catch below serves the fallback prayer.
+      const apologistStream = await streamPrayerChat(safeMessages, safePrayerContext);
       const encoder = new TextEncoder();
       const readable = new ReadableStream({
         async start(controller) {
@@ -91,8 +93,8 @@ export async function POST(request: NextRequest) {
       return new Response(readable, {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
-    } catch {
-      console.error("[POST /api/companion/chat] LLM stream failed");
+    } catch (error) {
+      console.error("[POST /api/companion/chat] LLM stream failed:", error);
       return textStream(buildFallbackReply(lastUserTopic), { "X-Fallback": "true" });
     }
   } catch {

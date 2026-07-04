@@ -34,6 +34,10 @@ export function validateEnv() {
 
 let validated = false;
 export function ensureEnv() {
+  // `next build` imports route modules to collect page data with no runtime
+  // env present (e.g. inside docker build). Validation still runs on every
+  // cold start in the deployed container.
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
   if (!validated) {
     validateEnv();
     validated = true;

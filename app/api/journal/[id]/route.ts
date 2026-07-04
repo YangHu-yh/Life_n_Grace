@@ -71,3 +71,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   });
 }
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const deleted = await prismaJournal.journalEntry.deleteMany({
+      where: { id: context.params.id, userId }
+    });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[DELETE /api/journal/[id]]", error);
+    return NextResponse.json(
+      { error: "An unexpected error occurred." },
+      { status: 500 }
+    );
+  }
+}

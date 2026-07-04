@@ -75,36 +75,54 @@ export async function generatePrayerChat(
   }
 }
 
-export function streamPrayerChat(
+// The upstream fetch is awaited BEFORE the stream is constructed so that
+// connection failures and non-2xx responses reject this promise — callers
+// can catch and serve a fallback instead of returning a broken stream.
+export async function streamPrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }
-): ReadableStream<string> {
+): Promise<ReadableStream<string>> {
   const { apiKey, base, modelId } = getConfig();
+
+  const controller = new AbortController();
+  const connectTimeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: modelId,
+        stream: true,
+        messages: [
+          { role: "system", content: buildSystemPrompt(prayerContext) },
+          ...messages,
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Apologist API request timed out");
+    }
+    throw error;
+  } finally {
+    clearTimeout(connectTimeout);
+  }
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Apologist API returned status ${response.status}`);
+  }
+
+  const body = response.body;
 
   return new ReadableStream({
     async start(controller) {
-      const response = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: modelId,
-          stream: true,
-          messages: [
-            { role: "system", content: buildSystemPrompt(prayerContext) },
-            ...messages,
-          ],
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        controller.error(new Error(`Apologist API returned status ${response.status}`));
-        return;
-      }
-
-      const reader = response.body.getReader();
+      const reader = body.getReader();
       const decoder = new TextDecoder();
 
       try {

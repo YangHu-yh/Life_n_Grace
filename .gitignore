@@ -13,3 +13,6 @@ prisma/**/migrations
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# Prisma generated clients (regenerated at build)
+generated/
