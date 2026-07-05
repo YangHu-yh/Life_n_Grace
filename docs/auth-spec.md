@@ -1,7 +1,22 @@
 # Authentication Spec — Email Verification + Google OAuth
 
-**Version:** 1.0  
-**Date:** 2026-05-06  
+**Version:** 1.1  
+**Date:** 2026-07-05 (v1.0: 2026-05-06)  
+
+> **Status — implemented in two phases (2026-07-05):**
+> - **Phase A ✅ (shipped):** §3 schema (Auth.js-ready models, cascades, nullable
+>   passwordHash), §5 email-verification flow (on the existing JWT auth, not
+>   Auth.js yet), §6 `lib/email.ts` (Resend + SES + no-provider fallback),
+>   §13 account deletion + profile danger-zone UI, signup hardening (email
+>   regex, 8-char minimum, enumeration-safe response). While no email provider
+>   is configured, signups are **auto-verified** so demo accounts are never
+>   locked out; setting `RESEND_API_KEY` or `EMAIL_PROVIDER=ses` switches new
+>   signups to mandatory verification automatically.
+> - **Phase B ⏸ (blocked on credentials):** §1/§4 Auth.js v5 migration, §7
+>   Google OAuth, §9 route migration to `auth()`, §10 middleware swap. Requires
+>   `GOOGLE_CLIENT_ID/SECRET` + a Resend or SES key, and should be verified
+>   against a real database login rather than typecheck alone.
+
 **Linked plan items:** P0-AUTH-1 through P1-AUTH-5  
 **Security framework:** ISO 27001:2022 Clause 8.5 (Secure authentication), A.8.2 (Privileged access)  
 **Privacy framework:** GDPR Art. 6(1)(b) contract, Art. 5(1)(e) storage limitation, Art. 17 erasure

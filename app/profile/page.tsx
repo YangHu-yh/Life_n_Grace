@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Profile = {
@@ -19,7 +20,10 @@ type ReminderSetting = {
 };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -353,6 +357,46 @@ export default function ProfilePage() {
             </button>
             {passwordMessage && <p className="muted">{passwordMessage}</p>}
           </form>
+        </div>
+
+        <div className="card-soft">
+          <h3>Delete account</h3>
+          <p className="muted">
+            Permanently removes your account, prayer cards, habit history, and
+            all journal entries. This cannot be undone.
+          </p>
+          <button
+            className="button button-outline button-danger"
+            type="button"
+            disabled={isDeletingAccount}
+            onClick={async () => {
+              const confirmed = window.confirm(
+                "Delete your account and ALL your data? This cannot be undone."
+              );
+              if (!confirmed) return;
+              setIsDeletingAccount(true);
+              setDeleteMessage(null);
+              try {
+                const response = await fetch("/api/auth/account", {
+                  method: "DELETE"
+                });
+                if (!response.ok) {
+                  const data = await response.json().catch(() => ({}));
+                  setDeleteMessage(data.error ?? "Could not delete your account.");
+                  return;
+                }
+                router.push("/");
+                router.refresh();
+              } catch {
+                setDeleteMessage("Could not reach the server. Please try again.");
+              } finally {
+                setIsDeletingAccount(false);
+              }
+            }}
+          >
+            {isDeletingAccount ? "Deleting..." : "Delete my account"}
+          </button>
+          {deleteMessage && <p className="muted">{deleteMessage}</p>}
         </div>
       </div>
     </section>

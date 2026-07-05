@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prismaMain } from "@/lib/db/main";
 import { setAuthCookie, signAuthToken, verifyPassword } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { isEmailConfigured } from "@/lib/email";
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_MS = 60_000;
@@ -31,7 +32,8 @@ export async function POST(request: NextRequest) {
       );
     }
     const user = await prismaMain.user.findUnique({ where: { email } });
-    if (!user) {
+    // passwordHash is null for OAuth-only accounts — treat as no credential
+    if (!user?.passwordHash) {
       return NextResponse.json(
         { error: "Invalid credentials." },
         { status: 401 }
@@ -42,6 +44,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Invalid credentials." },
         { status: 401 }
+      );
+    }
+    if (!user.emailVerified && isEmailConfigured()) {
+      return NextResponse.json(
+        { error: "Please verify your email first. Check your inbox for the link." },
+        { status: 403 }
       );
     }
     const token = await signAuthToken(user.id);

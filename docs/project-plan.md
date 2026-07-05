@@ -238,6 +238,13 @@ Context: single-developer cadence, 1-week sprints. **Milestone: partner-demoable
 ### Sprint 4 — Auth Overhaul (Week 4, post-demo)
 **Goal:** Email verification working; Google sign-in working. (Moved from v2.0 Sprint 2.)
 
+> **Phase A shipped 2026-07-05** ([auth-spec v1.1](auth-spec.md)): P2-AUTH-2 schema,
+> P2-AUTH-3 verification flow (on existing JWT auth; auto-verify until an email
+> provider is configured), P2-AUTH-4 lib/email.ts, P2-AUTH-8 account deletion +
+> profile UI. **Phase B pending user credentials** (Google OAuth + Resend/SES):
+> P2-AUTH-1/5/6/7 Auth.js v5 migration — deliberately deferred so the auth
+> backbone swap is verified against a real login, not just typecheck.
+
 | Item | Deliverable |
 |------|-------------|
 | P2-AUTH-2 | Prisma schema updated (emailVerified, Account, Session, VerificationToken) |

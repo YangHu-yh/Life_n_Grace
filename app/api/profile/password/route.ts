@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
     select: { id: true, passwordHash: true }
   });
 
-  if (!user) {
+  if (!user?.passwordHash) {
+    // OAuth-only accounts have no password to change
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
 

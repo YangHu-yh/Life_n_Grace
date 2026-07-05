@@ -15,12 +15,14 @@
     "prisma:migrate:journal": "prisma migrate dev --schema prisma/journal/schema.prisma"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1079.0",
     "@prisma/client": "^5.18.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.2.4",
     "next": "^15.5.20",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "resend": "^6.17.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
