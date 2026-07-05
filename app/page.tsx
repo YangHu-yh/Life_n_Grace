@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ChatTeardropText, HandsPraying, LockKey } from "@phosphor-icons/react";
 
 export default function HomePage() {
   const [isAuthed, setIsAuthed] = useState(false);
@@ -22,19 +23,12 @@ export default function HomePage() {
     <section className="grid">
       <div className="hero">
         <div className="hero-panel">
-          <span className="pill">Expressive Minimalist Prayer Space</span>
-          <h1>Life-n-Grace</h1>
-          <p className="muted">
-            A peaceful place for beginner and everyday believers to record
-            prayers, build habits, and stay grounded in Scripture with AI prayer
-            guidance.
+          <span className="pill">Prayer journal &amp; companion</span>
+          <h1>Every prayer, one wall.</h1>
+          <p className="muted" style={{ maxWidth: "46ch", fontSize: 17 }}>
+            Track requests as they move toward answers, journal privately with
+            encryption, and build a daily prayer habit.
           </p>
-          {!isAuthed && (
-            <p className="muted">
-              Sign in to unlock your personal Prayers workspace, Companion chat,
-              and private journal history.
-            </p>
-          )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {isAuthed ? (
               <>
@@ -58,24 +52,34 @@ export default function HomePage() {
           </div>
         </div>
         <div className="grid grid-2">
-          <div className="card">
-            <h3>Prayer Stickers</h3>
+          <div className="card feature-card">
+            <span className="feature-icon">
+              <HandsPraying size={26} weight="duotone" />
+            </span>
+            <h3>Prayer wall</h3>
             <p className="muted">
-              Record prayers and watch them move from seed to bloom across your
-              wall of stickers.
+              Move each request through its journey: active, accomplished,
+              re-routed, or praise.
             </p>
           </div>
-          <div className="card">
-            <h3>Companion Chat</h3>
+          <div className="card feature-card">
+            <span className="feature-icon">
+              <ChatTeardropText size={26} weight="duotone" />
+            </span>
+            <h3>Companion chat</h3>
             <p className="muted">
-              Ask Companion for prayer support and receive Bible verses plus a short
+              Share what is on your heart and receive Scripture with a short
               guided prayer.
             </p>
           </div>
-          <div className="card">
-            <h3>Secure by Design</h3>
+          <div className="card feature-card">
+            <span className="feature-icon">
+              <LockKey size={26} weight="duotone" />
+            </span>
+            <h3>Private by design</h3>
             <p className="muted">
-              Journal content is encrypted and stored in a separate database.
+              Journal entries are encrypted before they ever reach the database,
+              stored apart from your account.
             </p>
           </div>
         </div>

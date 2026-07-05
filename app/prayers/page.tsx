@@ -64,6 +64,13 @@ const PRAYER_LANES: Array<{
   }
 ];
 
+function shortDate(value: string | Date): string {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  });
+}
+
 function toPrayerBoard(payload: unknown): PrayerBoard {
   const fallback = EMPTY_PRAYER_BOARD;
 
@@ -546,11 +553,12 @@ export default function PrayersPage() {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "flex-start",
-                        gap: 10
+                        gap: 10,
+                        flexWrap: "wrap"
                       }}
                     >
-                      <strong>{prayer.topic}</strong>
-                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <strong style={{ flex: "1 1 140px" }}>{prayer.topic}</strong>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                         <button
                           className={`button ${
                             selectedForMove === prayer.id ? "" : "button-outline"
@@ -582,16 +590,15 @@ export default function PrayersPage() {
                     ) : (
                       <>
                         {prayer.notes && <p className="muted">{prayer.notes}</p>}
-                        <p className="muted">
+                        <p className="muted" style={{ margin: "6px 0 0" }}>
                           Prayed {prayer.prayerCount ?? 0} time
                           {(prayer.prayerCount ?? 0) === 1 ? "" : "s"}
+                          {prayer.lastPrayedAt &&
+                            ` · last ${shortDate(prayer.lastPrayedAt)}`}
                         </p>
-                        {prayer.lastPrayedAt && (
-                          <small className="muted">
-                            Last prayed: {new Date(prayer.lastPrayedAt).toLocaleString()}
-                          </small>
-                        )}
-                        <small>{new Date(prayer.createdAt).toLocaleString()}</small>
+                        <small className="muted" style={{ display: "block" }}>
+                          Added {shortDate(prayer.createdAt)}
+                        </small>
                         <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                           <button
                             className="button button-outline"
@@ -736,7 +743,9 @@ export default function PrayersPage() {
                       Linked to wall card: {allPrayers.find((p) => p.id === entry.relatedPrayerId)?.topic ?? entry.relatedPrayerId}
                     </p>
                   )}
-                  <small>{new Date(entry.createdAt).toLocaleString()}</small>
+                  <small className="muted" style={{ display: "block" }}>
+                    Added {shortDate(entry.createdAt)}
+                  </small>
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       className="button button-outline"

@@ -32,33 +32,41 @@ export default function SiteHeader() {
     }
   }
 
+  const links = isAuthed
+    ? [
+        { href: "/prayers", label: "Prayers" },
+        { href: "/companion", label: "Companion" },
+        { href: "/profile", label: "Profile" }
+      ]
+    : [
+        { href: "/policy", label: "Policy" },
+        { href: "/login", label: "Sign in" },
+        { href: "/signup", label: "Create account" }
+      ];
+
   return (
-    <header style={{ padding: "28px 20px" }}>
-      <div
-        style={{
-          maxWidth: 1120,
-          margin: "0 auto",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap"
-        }}
-      >
-        <Link href="/" style={{ fontWeight: 700 }}>
+    <header className="site-header">
+      <div className="site-header-inner">
+        <Link href="/" className="site-brand">
           Life-n-Grace
         </Link>
-        <nav style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <Link href="/">Home</Link>
-          {isAuthed && <Link href="/prayers">Prayers</Link>}
-          {isAuthed && <Link href="/companion">Companion</Link>}
-          {isAuthed && <Link href="/profile">Profile</Link>}
-          <Link href="/policy">Policy</Link>
-          {!isAuthed && <Link href="/login">Sign in</Link>}
-          {!isAuthed && <Link href="/signup">Create account</Link>}
+        <nav className="site-nav">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={pathname === link.href ? "is-active" : undefined}
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
         {isAuthed && (
-          <button className="button button-outline" type="button" onClick={handleLogout}>
+          <button
+            className="button button-outline logout-button"
+            type="button"
+            onClick={handleLogout}
+          >
             Log out
           </button>
         )}
