@@ -122,6 +122,9 @@ export default function PrayersPage() {
   const [collapsedJournalCards, setCollapsedJournalCards] = useState<Record<string, boolean>>(
     {}
   );
+  // Touch-friendly move: tap a card's "Move" button to select it, then tap
+  // "Move here" on a lane. Works where drag-and-drop can't (mobile).
+  const [selectedForMove, setSelectedForMove] = useState<string | null>(null);
 
   const allJournals = useMemo(
     () => [...historyJournals, ...activeJournals],
@@ -244,6 +247,42 @@ export default function PrayersPage() {
     await updatePrayerLane(prayerId, nextLane);
   }
 
+  async function moveSelectedToLane(lane: PrayerLane) {
+    if (!selectedForMove) return;
+    const prayerId = selectedForMove;
+    setSelectedForMove(null);
+    await updatePrayerLane(prayerId, lane);
+  }
+
+  async function deletePrayer(prayerId: string) {
+    if (!window.confirm("Delete this prayer card? This cannot be undone.")) {
+      return;
+    }
+    const response = await fetch(`/api/prayers/${prayerId}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setNotice(data.error ?? "Could not delete prayer card.");
+      return;
+    }
+    if (selectedForMove === prayerId) setSelectedForMove(null);
+    setNotice("Prayer card deleted.");
+    await loadOverview();
+  }
+
+  async function deleteJournalEntry(journalId: string) {
+    if (!window.confirm("Delete this journal entry? This cannot be undone.")) {
+      return;
+    }
+    const response = await fetch(`/api/journal/${journalId}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setNotice(data.error ?? "Could not delete journal entry.");
+      return;
+    }
+    setNotice("Journal entry deleted.");
+    await loadOverview();
+  }
+
   function openJournalModal() {
     setIsJournalModalOpen(true);
   }
@@ -346,6 +385,10 @@ export default function PrayersPage() {
     );
   }
 
+  const selectedPrayer = selectedForMove
+    ? allPrayers.find((item) => item.id === selectedForMove) ?? null
+    : null;
+
   return (
     <section className="grid">
       <div className="hero-panel">
@@ -375,16 +418,36 @@ export default function PrayersPage() {
         </div>
       )}
 
+      {selectedPrayer && (
+        <div className="card-soft move-banner">
+          <p className="muted" style={{ margin: 0 }}>
+            Moving <strong>{selectedPrayer.topic}</strong> — tap{" "}
+            <strong>Move here</strong> on a lane, or{" "}
+            <button
+              className="button button-outline"
+              type="button"
+              style={{ padding: "4px 12px" }}
+              onClick={() => setSelectedForMove(null)}
+            >
+              Cancel
+            </button>
+          </p>
+        </div>
+      )}
+
       <div className="card">
         <h3>Prayer wall</h3>
         <p className="muted">
-          Drag any prayer journal card into the lane that matches its current stage.
+          On desktop, drag a card between lanes. On any device, tap{" "}
+          <strong>Move</strong> on a card, then <strong>Move here</strong> on a lane.
         </p>
         <div className="kanban-board">
           {PRAYER_LANES.map((lane) => (
             <div
               key={lane.key}
-              className={`kanban-column ${dragOverLane === lane.key ? "is-drop-target" : ""}`}
+              className={`kanban-column ${dragOverLane === lane.key ? "is-drop-target" : ""} ${
+                selectedPrayer && selectedPrayer.lane !== lane.key ? "is-move-target" : ""
+              }`}
               onDragOver={(event) => {
                 event.preventDefault();
                 if (dragOverLane !== lane.key) {
@@ -404,11 +467,25 @@ export default function PrayersPage() {
                 <strong>{lane.label}</strong>
                 <span className="pill">{prayerBoard[lane.key].length}</span>
               </div>
+              {selectedPrayer && selectedPrayer.lane !== lane.key && (
+                <button
+                  className="button"
+                  type="button"
+                  style={{ width: "100%", marginBottom: 12 }}
+                  onClick={() => {
+                    void moveSelectedToLane(lane.key);
+                  }}
+                >
+                  Move here
+                </button>
+              )}
               <div className="grid" style={{ gap: 12 }}>
                 {prayerBoard[lane.key].map((prayer) => (
                   <div
                     key={prayer.id}
-                    className="sticker prayer-card"
+                    className={`sticker prayer-card ${
+                      selectedForMove === prayer.id ? "is-selected-move" : ""
+                    }`}
                     draggable
                     onDragStart={(event) => handlePrayerDragStart(event, prayer.id)}
                     onDragEnd={handlePrayerDragEnd}
@@ -422,14 +499,30 @@ export default function PrayersPage() {
                       }}
                     >
                       <strong>{prayer.topic}</strong>
-                      <button
-                        className="button button-outline"
-                        type="button"
-                        style={{ padding: "6px 12px" }}
-                        onClick={() => togglePrayerCardCollapsed(prayer.id)}
-                      >
-                        {collapsedPrayerCards[prayer.id] ? "Expand" : "Collapse"}
-                      </button>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        <button
+                          className={`button ${
+                            selectedForMove === prayer.id ? "" : "button-outline"
+                          }`}
+                          type="button"
+                          style={{ padding: "6px 12px" }}
+                          onClick={() =>
+                            setSelectedForMove(
+                              selectedForMove === prayer.id ? null : prayer.id
+                            )
+                          }
+                        >
+                          {selectedForMove === prayer.id ? "Moving…" : "Move"}
+                        </button>
+                        <button
+                          className="button button-outline"
+                          type="button"
+                          style={{ padding: "6px 12px" }}
+                          onClick={() => togglePrayerCardCollapsed(prayer.id)}
+                        >
+                          {collapsedPrayerCards[prayer.id] ? "Expand" : "Collapse"}
+                        </button>
+                      </div>
                     </div>
                     {collapsedPrayerCards[prayer.id] ? (
                       <p className="muted">
@@ -473,6 +566,15 @@ export default function PrayersPage() {
                               <option value="PRAISE">Praise / gratitude</option>
                             </select>
                           </div>
+                          <button
+                            className="button button-outline button-danger"
+                            type="button"
+                            onClick={() => {
+                              void deletePrayer(prayer.id);
+                            }}
+                          >
+                            Delete card
+                          </button>
                         </div>
                       </>
                     )}
@@ -584,7 +686,7 @@ export default function PrayersPage() {
                     </p>
                   )}
                   <small>{new Date(entry.createdAt).toLocaleString()}</small>
-                  <div style={{ marginTop: 10 }}>
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       className="button button-outline"
                       type="button"
@@ -596,6 +698,15 @@ export default function PrayersPage() {
                       }
                     >
                       Mark {entry.status === "ACTIVE" ? "History" : "Active"}
+                    </button>
+                    <button
+                      className="button button-outline button-danger"
+                      type="button"
+                      onClick={() => {
+                        void deleteJournalEntry(entry.id);
+                      }}
+                    >
+                      Delete
                     </button>
                   </div>
                 </>

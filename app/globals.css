@@ -100,6 +100,21 @@ a {
   box-shadow: none;
 }
 
+.button-danger {
+  color: #b3261e;
+  border-color: rgba(179, 38, 30, 0.4);
+}
+
+.button-danger:hover {
+  background: rgba(179, 38, 30, 0.08);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -188,6 +203,17 @@ a {
 
 .prayer-card:active {
   cursor: grabbing;
+}
+
+.prayer-card.is-selected-move {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.kanban-column.is-move-target {
+  border-style: solid;
+  border-color: var(--blue);
+  background: #eef4ff;
 }
 
 input,
