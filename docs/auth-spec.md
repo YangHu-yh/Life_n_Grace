@@ -12,10 +12,23 @@
 >   is configured, signups are **auto-verified** so demo accounts are never
 >   locked out; setting `RESEND_API_KEY` or `EMAIL_PROVIDER=ses` switches new
 >   signups to mandatory verification automatically.
-> - **Phase B ⏸ (blocked on credentials):** §1/§4 Auth.js v5 migration, §7
->   Google OAuth, §9 route migration to `auth()`, §10 middleware swap. Requires
->   `GOOGLE_CLIENT_ID/SECRET` + a Resend or SES key, and should be verified
->   against a real database login rather than typecheck alone.
+> - **Phase A+ (2026-07-05):** Google sign-in implemented **without** Auth.js —
+>   a hand-rolled OAuth 2.0 code flow on the existing JWT auth
+>   (`/api/auth/google` → consent → `/api/auth/google/callback`): CSRF state
+>   cookie, server-side code exchange, id_token verified against Google's JWKS
+>   via jose, account linking by verified email, `Account` row recorded. The
+>   login button renders only when `GOOGLE_CLIENT_ID/SECRET` are set
+>   (`/api/auth/providers`). **Activation needs:** (1) OAuth client in Google
+>   Cloud Console with redirect URI `<origin>/api/auth/google/callback`,
+>   (2) both env vars in Secrets Manager + `app-stack.ts`, (3) **NAT on the
+>   demo Lambda** — the token exchange and JWKS fetch are outbound calls (same
+>   NAT as the Apologist activation). Password-reset flow also implemented
+>   (1h namespaced tokens, `/reset-password` page); sends once email is
+>   configured.
+> - **Phase B ⏸ (optional now):** §1/§4 full Auth.js v5 migration, §9 route
+>   migration to `auth()`, §10 middleware swap. With verification, reset, and
+>   Google OAuth all working on the custom JWT auth, migrate only if magic
+>   links / additional providers (Apple) justify it.
 
 **Linked plan items:** P0-AUTH-1 through P1-AUTH-5  
 **Security framework:** ISO 27001:2022 Clause 8.5 (Secure authentication), A.8.2 (Privileged access)  

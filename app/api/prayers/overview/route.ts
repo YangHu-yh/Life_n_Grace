@@ -35,19 +35,24 @@ export async function GET(request: NextRequest) {
   const last30Start = new Date(today);
   last30Start.setUTCDate(last30Start.getUTCDate() - 29);
 
+  // Cap unbounded queries (P2-7) — protects response time as data grows;
+  // cursor pagination (P1-5) will replace the caps later.
   const [prayers, journals, prayedCheckins] = await Promise.all([
     prismaMain.prayerRequest.findMany({
       where: { userId },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: 200
     }),
     prismaJournal.journalEntry.findMany({
       where: { userId },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: 200
     }),
     prismaMain.habitCheckin.findMany({
       where: { userId, completed: true },
       orderBy: { date: "desc" },
-      select: { date: true }
+      select: { date: true },
+      take: 400
     })
   ]);
 

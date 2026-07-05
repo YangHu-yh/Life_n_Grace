@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
   }
   const prayers = await prismaMain.prayerRequest.findMany({
     where: { userId },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    take: 200
   });
   return NextResponse.json({ prayers });
 }

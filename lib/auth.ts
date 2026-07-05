@@ -3,8 +3,20 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
-const TOKEN_COOKIE = "auth_token";
+export const TOKEN_COOKIE = "auth_token";
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+// Shared cookie options for handlers that set the cookie on a custom
+// response (e.g. OAuth redirects) instead of via cookies().
+export function authCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: TOKEN_TTL_SECONDS
+  };
+}
 
 function getJwtSecret() {
   const secret = process.env.AUTH_JWT_SECRET;

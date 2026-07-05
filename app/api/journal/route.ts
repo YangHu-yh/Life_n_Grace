@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
       userId,
       ...(statusFilter ? { status: statusFilter } : {})
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    take: 200
   });
 
   const decrypted = entries.map((entry) => ({

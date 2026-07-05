@@ -6,9 +6,13 @@ import Link from "next/link";
 
 const URL_MESSAGES: Record<string, string> = {
   verified: "Email verified! You can now sign in.",
+  reset: "Password updated! Sign in with your new password.",
   invalid_token: "That verification link is invalid. Please sign up again or request a new link.",
   expired_token: "That verification link has expired. Please sign up again to receive a new one.",
-  verify_failed: "We could not verify your email just now. Please try the link again."
+  verify_failed: "We could not verify your email just now. Please try the link again.",
+  google_unavailable: "Google sign-in is not enabled yet in this preview.",
+  google_failed: "Google sign-in did not complete. Please try again or use your password.",
+  google_email_unverified: "Your Google account's email is unverified. Please verify it with Google first."
 };
 
 export default function LoginPage() {
@@ -17,14 +21,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   useEffect(() => {
     // Read once on mount; avoids useSearchParams' Suspense requirement.
     const params = new URLSearchParams(window.location.search);
     if (params.get("verified") === "1") setMessage(URL_MESSAGES.verified);
+    else if (params.get("reset") === "1") setMessage(URL_MESSAGES.reset);
     else if (params.get("error")) {
       setMessage(URL_MESSAGES[params.get("error") ?? ""] ?? null);
     }
+
+    fetch("/api/auth/providers")
+      .then((response) => (response.ok ? response.json() : { google: false }))
+      .then((data) => setGoogleEnabled(Boolean(data.google)))
+      .catch(() => setGoogleEnabled(false));
   }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -85,6 +96,11 @@ export default function LoginPage() {
           <button className="button" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
+          {googleEnabled && (
+            <a className="button button-outline" href="/api/auth/google">
+              Continue with Google
+            </a>
+          )}
           {message && <p>{message}</p>}
         </form>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
