@@ -25,6 +25,13 @@ hosting BOTH life_n_grace_main and life_n_grace_journal databases
 (two connection strings preserved — security boundary intact)
 ```
 
+> **Implemented in [`infra/`](../infra/README.md)** (CDK, two stacks: `LifeNGraceBase` + `LifeNGraceApp`).
+> Demo-tier deviations from the diagram above: RDS sits in a **public subnet,
+> security-group-locked** (only the Lambda SG, plus a transient CI rule that
+> exists for the seconds the deploy job runs) so CI can apply schema changes
+> without a NAT or bastion; schema sync uses `prisma db push` rather than
+> committed migrations for now (migration history lands with P1-7).
+
 **Demo-tier cost (verified 2026-07-04):**
 
 | Service | Monthly |

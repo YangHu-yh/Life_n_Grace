@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["es2022"],
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "include": ["bin/**/*.ts", "lib/**/*.ts"],
+  "exclude": ["node_modules", "cdk.out"]
+}

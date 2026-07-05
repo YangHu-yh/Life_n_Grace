@@ -1,0 +1,21 @@
+{
+  "name": "life-n-grace-infra",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth",
+    "deploy:base": "cdk deploy LifeNGraceBase",
+    "deploy:app": "cdk deploy LifeNGraceApp"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.170.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.11.30"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.3.0"
+  }
+}

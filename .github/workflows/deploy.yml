@@ -1,0 +1,115 @@
+name: Deploy to AWS (demo tier)
+
+on:
+  push:
+    branches: [typescript_Nextjs, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: life-n-grace
+  FUNCTION_NAME: life-n-grace-demo
+  BASE_STACK: LifeNGraceBase
+
+jobs:
+  deploy:
+    name: Build, Migrate, Deploy
+    runs-on: ubuntu-latest
+    # Skip silently until the AWS side exists (see infra/README.md step 3)
+    if: ${{ vars.AWS_DEPLOY_ENABLED == 'true' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC — no long-lived keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies (prisma CLI)
+        run: npm ci
+
+      - name: Read stack outputs
+        id: stack
+        run: |
+          OUTPUTS=$(aws cloudformation describe-stacks --stack-name "$BASE_STACK" \
+            --query "Stacks[0].Outputs" --output json)
+          echo "db_secret_arn=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="DbSecretArn").OutputValue')" >> "$GITHUB_OUTPUT"
+          echo "db_sg_id=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="DbSecurityGroupId").OutputValue')" >> "$GITHUB_OUTPUT"
+
+      - name: Open transient DB ingress for this runner
+        id: db-ingress
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "runner_ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ steps.stack.outputs.db_sg_id }}" \
+            --protocol tcp --port 5432 --cidr "$RUNNER_IP/32"
+
+      - name: Push Prisma schemas (ensure journal DB exists first)
+        env:
+          DB_SECRET_ARN: ${{ steps.stack.outputs.db_secret_arn }}
+        run: |
+          SECRET=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text)
+          DB_HOST=$(echo "$SECRET" | jq -r .host)
+          DB_USER=$(echo "$SECRET" | jq -r .username)
+          DB_PASS=$(echo "$SECRET" | jq -r .password)
+
+          ADMIN_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST:5432/postgres"
+          psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='life_n_grace_journal'" | grep -q 1 \
+            || psql "$ADMIN_URL" -c 'CREATE DATABASE life_n_grace_journal'
+
+          export MAIN_DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST:5432/life_n_grace_main"
+          export JOURNAL_DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST:5432/life_n_grace_journal"
+          npx prisma db push --schema prisma/main/schema.prisma --skip-generate
+          npx prisma db push --schema prisma/journal/schema.prisma --skip-generate
+
+      - name: Revoke transient DB ingress
+        if: always() && steps.db-ingress.outputs.runner_ip != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ steps.stack.outputs.db_sg_id }}" \
+            --protocol tcp --port 5432 --cidr "${{ steps.db-ingress.outputs.runner_ip }}/32" || true
+
+      - name: Update Lambda to new image
+        run: |
+          if ! aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
+            echo "::warning::Lambda $FUNCTION_NAME does not exist yet — run 'cdk deploy LifeNGraceApp' once (infra/README.md step 5). Image is pushed and ready."
+            exit 0
+          fi
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --image-uri "${{ steps.build-image.outputs.image }}"
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+          echo "Deployed ${{ github.sha }} to $FUNCTION_NAME"
