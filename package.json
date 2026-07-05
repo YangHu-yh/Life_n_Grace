@@ -12,7 +12,9 @@
     "db:down": "docker compose -f docker/docker-compose.yml down",
     "prisma:generate": "prisma generate --schema prisma/main/schema.prisma && prisma generate --schema prisma/journal/schema.prisma",
     "prisma:migrate:main": "prisma migrate dev --schema prisma/main/schema.prisma",
-    "prisma:migrate:journal": "prisma migrate dev --schema prisma/journal/schema.prisma"
+    "prisma:migrate:journal": "prisma migrate dev --schema prisma/journal/schema.prisma",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1079.0",
@@ -32,6 +34,8 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^15.5.20",
     "prisma": "^5.18.0",
-    "typescript": "^5.4.5"
+    "tsx": "^4.23.0",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9"
   }
 }

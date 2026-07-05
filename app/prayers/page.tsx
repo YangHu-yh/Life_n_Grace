@@ -174,37 +174,88 @@ export default function PrayersPage() {
     setIsAuthed(true);
   }
 
+  // Optimistic: move the card in local state immediately, roll back if the
+  // request fails. No full board reload on success.
   async function updatePrayerLane(
     prayerId: string,
     lane: PrayerLane
   ) {
-    const response = await fetch("/api/prayers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: prayerId, lane })
+    const previousBoard = prayerBoard;
+    const prayer = allPrayers.find((item) => item.id === prayerId);
+    if (!prayer) return;
+
+    setPrayerBoard((board) => {
+      const next: PrayerBoard = {
+        ACTIVE: board.ACTIVE.filter((p) => p.id !== prayerId),
+        ACCOMPLISHED: board.ACCOMPLISHED.filter((p) => p.id !== prayerId),
+        REROUTED: board.REROUTED.filter((p) => p.id !== prayerId),
+        PRAISE: board.PRAISE.filter((p) => p.id !== prayerId)
+      };
+      next[lane] = [{ ...prayer, lane }, ...next[lane]];
+      return next;
     });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setNotice(data.error ?? "Could not move prayer card.");
-      return;
-    }
     setNotice(null);
-    await loadOverview();
+
+    try {
+      const response = await fetch("/api/prayers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: prayerId, lane })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setPrayerBoard(previousBoard);
+        setNotice(data.error ?? "Could not move prayer card.");
+      }
+    } catch {
+      setPrayerBoard(previousBoard);
+      setNotice("Could not reach the server. The card was not moved.");
+    }
   }
 
+  // Optimistic: bump the count locally, refresh streak stats in the
+  // background, roll back on failure.
   async function markPrayerPrayed(prayerId: string) {
-    const response = await fetch("/api/prayers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: prayerId, markPrayed: true })
+    const previousBoard = prayerBoard;
+
+    setPrayerBoard((board) => {
+      const bump = (list: Prayer[]) =>
+        list.map((p) =>
+          p.id === prayerId
+            ? {
+                ...p,
+                prayerCount: (p.prayerCount ?? 0) + 1,
+                lastPrayedAt: new Date().toISOString()
+              }
+            : p
+        );
+      return {
+        ACTIVE: bump(board.ACTIVE),
+        ACCOMPLISHED: bump(board.ACCOMPLISHED),
+        REROUTED: bump(board.REROUTED),
+        PRAISE: bump(board.PRAISE)
+      };
     });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setNotice(data.error ?? "Could not record prayer count.");
-      return;
-    }
     setNotice("Recorded this prayer.");
-    await loadOverview();
+
+    try {
+      const response = await fetch("/api/prayers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: prayerId, markPrayed: true })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setPrayerBoard(previousBoard);
+        setNotice(data.error ?? "Could not record prayer count.");
+        return;
+      }
+      // Streak/habit numbers changed server-side — refresh without blocking
+      void loadOverview();
+    } catch {
+      setPrayerBoard(previousBoard);
+      setNotice("Could not reach the server. The prayer was not recorded.");
+    }
   }
 
   function handlePrayerDragStart(event: React.DragEvent<HTMLDivElement>, prayerId: string) {

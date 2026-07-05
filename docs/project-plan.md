@@ -1,7 +1,25 @@
 # Life-n-Grace — Project Plan
 
-**Version:** 2.1 — Demo-First Reprioritization  
-**Date:** 2026-07-04 (v2.0: 2026-05-06)  
+**Version:** 2.2 — Post-Sprint-3 Review  
+**Date:** 2026-07-05 (v2.1: 2026-07-04 · v2.0: 2026-05-06)  
+
+> **v2.2 changes (2026-07-05):**
+> - **Status:** Sprints 1–3 complete and CI-green (~2 sprints ahead of the v2.1
+>   calendar). Sprint 4 **Phase A** shipped (see Sprint 4 note); Phase B blocked
+>   on user credentials. 🎯 Demo milestone blocked ONLY on the user-side AWS
+>   runbook ([infra/README.md](../infra/README.md)).
+> - **Pulled forward (demo-visible or CI-strengthening):** P2-2 optimistic
+>   updates ✅, demo seed script ✅ (`npm run seed:demo`), P2-9 core unit tests ✅
+>   (vitest — encryption, rate-limit, validation, env — wired into CI), P1-1
+>   lane-constants extraction ✅.
+> - **Pushed back:** remaining Sprint 5 refactors (P1-4, P1-5, P1-7, P1-8,
+>   P2-1, P2-7) — internal quality, zero demo visibility; P1-7's enum
+>   retirement waits for real migration history.
+> - **Corrections:** P2-4 reminder-settings UI marked done (already existed —
+>   v2.0 claim was stale). Unplanned completed work recorded: Next 14→15.5.20
+>   security upgrade (forced by Trivy), delete-button wiring, policy-page
+>   rewrite, npm removed from runtime image.
+
 **Status:** Active  
 **Methodology:** Kanban sprints (1-week iterations), ICE prioritization, MoSCoW classification  
 **Spec documents:** [auth-spec.md](auth-spec.md) · [apologist-fix-spec.md](apologist-fix-spec.md) · [aws-cicd-spec.md](aws-cicd-spec.md) · [technical-spec.md](technical-spec.md)

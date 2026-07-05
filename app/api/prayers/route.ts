@@ -2,25 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prismaMain } from "@/lib/db/main";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { LIMITS, lengthError } from "@/lib/validation";
-
-const VALID_LANES = ["ACTIVE", "ACCOMPLISHED", "REROUTED", "PRAISE"] as const;
-const LEGACY_STAGE_TO_LANE: Record<string, (typeof VALID_LANES)[number]> = {
-  SEED: "ACTIVE",
-  SPROUT: "ACTIVE",
-  BLOOM: "ACCOMPLISHED"
-};
-const LANE_TO_LEGACY_STAGE: Record<(typeof VALID_LANES)[number], "SEED" | "BLOOM"> = {
-  ACTIVE: "SEED",
-  ACCOMPLISHED: "BLOOM",
-  REROUTED: "SEED",
-  PRAISE: "SEED"
-};
-
-type PrayerLane = (typeof VALID_LANES)[number];
-
-function isPrayerLane(value: unknown): value is PrayerLane {
-  return typeof value === "string" && VALID_LANES.includes(value as PrayerLane);
-}
+import {
+  isPrayerLane,
+  LANE_TO_LEGACY_STAGE,
+  LEGACY_STAGE_TO_LANE,
+  type PrayerLane
+} from "@/lib/prayers/constants";
 
 function startOfTodayUtc() {
   const now = new Date();

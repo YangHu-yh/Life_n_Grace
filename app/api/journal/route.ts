@@ -4,14 +4,11 @@ import { prismaMain } from "@/lib/db/main";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { decryptText, encryptText } from "@/lib/security/encryption";
 import { LIMITS, lengthError } from "@/lib/validation";
-
-const VALID_LANES = ["ACTIVE", "ACCOMPLISHED", "REROUTED", "PRAISE"] as const;
-const LANE_TO_LEGACY_STAGE: Record<(typeof VALID_LANES)[number], "SEED" | "BLOOM"> = {
-  ACTIVE: "SEED",
-  ACCOMPLISHED: "BLOOM",
-  REROUTED: "SEED",
-  PRAISE: "SEED"
-};
+import {
+  isPrayerLane,
+  LANE_TO_LEGACY_STAGE,
+  type PrayerLane
+} from "@/lib/prayers/constants";
 
 export async function GET(request: NextRequest) {
   const userId = await getUserIdFromRequest(request);
@@ -75,12 +72,11 @@ export async function POST(request: NextRequest) {
   const safeSourceLinks =
     Array.isArray(sourceLinks) || sourceLinks === undefined ? sourceLinks : null;
   const journalStatus = status ?? "ACTIVE";
-  const prayerLane =
-    lane && VALID_LANES.includes(lane as (typeof VALID_LANES)[number])
-      ? (lane as (typeof VALID_LANES)[number])
-      : journalStatus === "HISTORY"
-        ? "ACCOMPLISHED"
-        : "ACTIVE";
+  const prayerLane: PrayerLane = isPrayerLane(lane)
+    ? lane
+    : journalStatus === "HISTORY"
+      ? "ACCOMPLISHED"
+      : "ACTIVE";
 
   let finalRelatedPrayerId: string | null = relatedPrayerId
     ? String(relatedPrayerId)

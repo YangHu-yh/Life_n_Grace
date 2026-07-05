@@ -31,6 +31,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       # Hard-fail only on critical advisories; high are reported but do not
       # block (dependency upgrades are scheduled work, not CI noise).
       - name: Security audit (critical = fail)
