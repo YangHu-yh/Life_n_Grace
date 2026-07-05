@@ -9,23 +9,31 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    if (response.ok) {
-      setMessage("Signed in. Redirecting...");
-      router.push("/prayers");
-      router.refresh();
-      return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage("Signed in. Redirecting...");
+        router.push("/prayers");
+        router.refresh();
+        return;
+      }
+      setMessage(data.error);
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-    setMessage(data.error);
   }
 
   return (
@@ -58,8 +66,8 @@ export default function LoginPage() {
               required
             />
           </div>
-          <button className="button" type="submit">
-            Sign in
+          <button className="button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
           {message && <p>{message}</p>}
         </form>

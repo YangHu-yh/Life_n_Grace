@@ -113,6 +113,7 @@ export default function PrayersPage() {
   const [journalRelatedPrayerId, setJournalRelatedPrayerId] = useState("");
   const [journalSourceLinksText, setJournalSourceLinksText] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSavingJournal, setIsSavingJournal] = useState(false);
   const [draggedPrayerId, setDraggedPrayerId] = useState<string | null>(null);
   const [dragOverLane, setDragOverLane] = useState<PrayerLane | null>(null);
   const [collapsedPrayerCards, setCollapsedPrayerCards] = useState<Record<string, boolean>>(
@@ -262,31 +263,38 @@ export default function PrayersPage() {
       .map((line) => line.trim())
       .filter(Boolean);
 
-    const response = await fetch("/api/journal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: journalTitle,
-        content: journalContent,
-        status: journalStatus,
-        relatedPrayerId: journalRelatedPrayerId || null,
-        sourceLinks
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setNotice(data.error ?? "Could not create prayer journal.");
-      return;
-    }
+    setIsSavingJournal(true);
+    try {
+      const response = await fetch("/api/journal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: journalTitle,
+          content: journalContent,
+          status: journalStatus,
+          relatedPrayerId: journalRelatedPrayerId || null,
+          sourceLinks
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setNotice(data.error ?? "Could not create prayer journal.");
+        return;
+      }
 
-    setIsJournalModalOpen(false);
-    setJournalTitle("");
-    setJournalContent("");
-    setJournalStatus("ACTIVE");
-    setJournalRelatedPrayerId("");
-    setJournalSourceLinksText("");
-    setNotice("Prayer journal saved.");
-    await loadOverview();
+      setIsJournalModalOpen(false);
+      setJournalTitle("");
+      setJournalContent("");
+      setJournalStatus("ACTIVE");
+      setJournalRelatedPrayerId("");
+      setJournalSourceLinksText("");
+      setNotice("Prayer journal saved.");
+      await loadOverview();
+    } catch {
+      setNotice("Could not reach the server. Please try again.");
+    } finally {
+      setIsSavingJournal(false);
+    }
   }
 
   async function updateJournalStatus(
@@ -693,13 +701,14 @@ export default function PrayersPage() {
                 />
               </div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <button className="button" type="submit">
-                  Save prayer journal
+                <button className="button" type="submit" disabled={isSavingJournal}>
+                  {isSavingJournal ? "Saving..." : "Save prayer journal"}
                 </button>
                 <button
                   className="button button-outline"
                   type="button"
                   onClick={() => setIsJournalModalOpen(false)}
+                  disabled={isSavingJournal}
                 >
                   Cancel
                 </button>

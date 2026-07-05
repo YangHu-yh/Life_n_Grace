@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prismaMain } from "@/lib/db/main";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { LIMITS, lengthError } from "@/lib/validation";
 
 const VALID_LANES = ["ACTIVE", "ACCOMPLISHED", "REROUTED", "PRAISE"] as const;
 const LEGACY_STAGE_TO_LANE: Record<string, (typeof VALID_LANES)[number]> = {
@@ -49,6 +50,12 @@ export async function POST(request: NextRequest) {
       { error: "Prayer topic is required." },
       { status: 400 }
     );
+  }
+  const lengthProblem =
+    lengthError("Prayer topic", topic, LIMITS.prayerTopic) ??
+    lengthError("Notes", notes, LIMITS.prayerNotes);
+  if (lengthProblem) {
+    return NextResponse.json({ error: lengthProblem }, { status: 400 });
   }
   if (lane && !isPrayerLane(lane)) {
     return NextResponse.json({ error: "Invalid lane." }, { status: 400 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prismaJournal } from "@/lib/db/journal";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { decryptText, encryptText } from "@/lib/security/encryption";
+import { LIMITS, lengthError } from "@/lib/validation";
 import type { Prisma } from "@/generated/journal";
 
 type RouteContext = {
@@ -30,6 +31,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
   if (sourceLinks !== undefined && !Array.isArray(sourceLinks)) {
     return NextResponse.json({ error: "sourceLinks must be an array." }, { status: 400 });
+  }
+  const lengthProblem =
+    lengthError("Title", title, LIMITS.journalTitle) ??
+    lengthError("Entry", content, LIMITS.journalContent);
+  if (lengthProblem) {
+    return NextResponse.json({ error: lengthProblem }, { status: 400 });
   }
 
   const data: {

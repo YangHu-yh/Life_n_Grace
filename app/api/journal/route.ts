@@ -3,6 +3,7 @@ import { prismaJournal } from "@/lib/db/journal";
 import { prismaMain } from "@/lib/db/main";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { decryptText, encryptText } from "@/lib/security/encryption";
+import { LIMITS, lengthError } from "@/lib/validation";
 
 const VALID_LANES = ["ACTIVE", "ACCOMPLISHED", "REROUTED", "PRAISE"] as const;
 const LANE_TO_LEGACY_STAGE: Record<(typeof VALID_LANES)[number], "SEED" | "BLOOM"> = {
@@ -61,6 +62,12 @@ export async function POST(request: NextRequest) {
       { error: "Title and content are required." },
       { status: 400 }
     );
+  }
+  const lengthProblem =
+    lengthError("Title", title, LIMITS.journalTitle) ??
+    lengthError("Entry", content, LIMITS.journalContent);
+  if (lengthProblem) {
+    return NextResponse.json({ error: lengthProblem }, { status: 400 });
   }
   if (status && !["ACTIVE", "HISTORY"].includes(status)) {
     return NextResponse.json({ error: "Invalid journal status." }, { status: 400 });

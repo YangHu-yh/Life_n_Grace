@@ -7,17 +7,25 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
-    const response = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    setMessage(response.ok ? "Account created. You can sign in." : data.error);
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      setMessage(response.ok ? "Account created. You can sign in." : data.error);
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -51,8 +59,8 @@ export default function SignupPage() {
               required
             />
           </div>
-          <button className="button" type="submit">
-            Create account
+          <button className="button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Creating account..." : "Create account"}
           </button>
           {message && <p>{message}</p>}
         </form>

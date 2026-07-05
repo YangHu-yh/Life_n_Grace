@@ -6,17 +6,25 @@ import Link from "next/link";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
-    const response = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
-    const data = await response.json();
-    setMessage(response.ok ? data.message : data.error);
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+      const data = await response.json();
+      setMessage(response.ok ? data.message : data.error);
+    } catch {
+      setMessage("Could not reach the server. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -38,8 +46,8 @@ export default function ForgotPasswordPage() {
               required
             />
           </div>
-          <button className="button" type="submit">
-            Send reset link
+          <button className="button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Sending..." : "Send reset link"}
           </button>
           {message && <p>{message}</p>}
         </form>
