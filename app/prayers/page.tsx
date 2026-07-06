@@ -796,7 +796,7 @@ export default function PrayersPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(11, 31, 58, 0.4)",
+            background: "rgba(35, 33, 27, 0.45)",
             display: "grid",
             placeItems: "center",
             zIndex: 1000,

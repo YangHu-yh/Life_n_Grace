@@ -4,52 +4,59 @@
   box-sizing: border-box;
 }
 
+/* Quiet design system — warm paper, serif voice, evergreen accent.
+   Hairline edges and small radii; color and shadow used sparingly. */
 :root {
   color-scheme: light;
-  --ink: #0b1f3a;
-  --muted: #4b6a8a;
-  --blue: #2f6bff;
-  --blue-soft: #b5ccff;
-  --surface: #ffffff;
-  --surface-soft: #f5f8ff;
-  --border: #d9e4ff;
-  --shadow: 0 18px 45px rgba(20, 45, 90, 0.14);
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
+  --ink: #23211b;
+  --muted: #57534a;
+  --faint: #8b8578;
+  --accent: #33564a;
+  --accent-deep: #2a473d;
+  --accent-wash: #e7ece7;
+  --on-accent: #f3f1e8;
+  --paper: #edeae1;
+  --surface: #f6f4ec;
+  --surface-soft: #f1eee4;
+  --border: #d6d1c4;
+  --border-soft: #ddd8ca;
+  --danger: #a33d2e;
+  --shadow: 0 1px 3px rgba(35, 33, 27, 0.07);
+  --radius-xl: 14px;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+  --font-serif: var(--font-newsreader), "Iowan Old Style", Palatino, Georgia, serif;
+  --font-sans: var(--font-outfit), system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 }
 
 body {
   margin: 0;
-  font-family: var(--font-outfit), system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   color: var(--ink);
-  background: radial-gradient(circle at top, #f7faff 0%, #eef4ff 40%, #fdfdff 100%);
+  background: var(--paper);
   min-height: 100vh;
 }
 
 h1,
 h2,
 h3 {
-  letter-spacing: -0.02em;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
 h1 {
-  font-size: clamp(32px, 5vw, 44px);
-  line-height: 1.1;
+  font-size: clamp(34px, 5vw, 48px);
+  line-height: 1.06;
   margin: 8px 0 12px;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: -20% -10% auto auto;
-  height: 320px;
-  width: 320px;
-  background: radial-gradient(circle, rgba(47, 107, 255, 0.25), transparent 70%);
-  filter: blur(10px);
-  z-index: -1;
+h2 {
+  font-size: clamp(24px, 3.2vw, 32px);
+  line-height: 1.12;
 }
 
 main {
@@ -58,8 +65,15 @@ main {
   padding: 40px 24px 96px;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .site-header {
   padding: 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
 }
 
 .site-header-inner {
@@ -71,9 +85,10 @@ main {
 }
 
 .site-brand {
+  font-family: var(--font-serif);
   font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.02em;
+  font-size: 20px;
+  letter-spacing: -0.01em;
   flex-shrink: 0;
 }
 
@@ -86,6 +101,7 @@ main {
   white-space: nowrap;
   scrollbar-width: none;
   font-weight: 500;
+  color: var(--muted);
 }
 
 .site-nav::-webkit-scrollbar {
@@ -93,7 +109,8 @@ main {
 }
 
 .site-nav a.is-active {
-  color: var(--blue);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .logout-button {
@@ -127,19 +144,28 @@ a {
   text-decoration: none;
 }
 
+/* In-content links read as links; buttons and nav keep their own styling */
+.card a:not(.button),
+.card-soft a:not(.button) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+}
+
 .card {
   background: var(--surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: 24px;
   box-shadow: var(--shadow);
-  border: 1px solid rgba(217, 228, 255, 0.6);
+  border: 1px solid var(--border-soft);
 }
 
 .card-soft {
   background: var(--surface-soft);
   border-radius: var(--radius-lg);
   padding: 24px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
 }
 
 .grid {
@@ -160,21 +186,30 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 18px;
-  border-radius: 999px;
-  background: var(--blue);
-  color: #fff;
-  border: none;
+  padding: 11px 18px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid transparent;
   cursor: pointer;
+  font-family: var(--font-sans);
   font-weight: 600;
-  box-shadow: 0 8px 24px rgba(47, 107, 255, 0.25);
+  font-size: 14px;
+}
+
+.button:hover {
+  background: var(--accent-deep);
 }
 
 .button-outline {
   background: transparent;
-  color: var(--blue);
-  border: 1px solid var(--blue-soft);
-  box-shadow: none;
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+.button-outline:hover {
+  background: var(--surface-soft);
+  border-color: var(--faint);
 }
 
 .feature-card {
@@ -189,10 +224,10 @@ a {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: var(--surface-soft);
-  color: var(--blue);
-  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--accent-wash);
+  color: var(--accent);
+  border: 1px solid var(--border-soft);
 }
 
 .feature-card h3 {
@@ -204,28 +239,29 @@ a {
 }
 
 .button-danger {
-  color: #b3261e;
-  border-color: rgba(179, 38, 30, 0.4);
+  color: var(--danger);
+  border-color: rgba(163, 61, 46, 0.35);
 }
 
 .button-danger:hover {
-  background: rgba(179, 38, 30, 0.08);
+  background: rgba(163, 61, 46, 0.08);
+  border-color: var(--danger);
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(47, 107, 255, 0.12);
-  color: var(--blue);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-wash);
+  color: var(--accent);
+  border: 1px solid var(--border-soft);
   font-weight: 600;
   font-size: 12px;
 }
@@ -237,9 +273,10 @@ a {
 }
 
 .hero-panel {
-  background: linear-gradient(135deg, #ffffff 0%, #eef4ff 70%, #dce7ff 100%);
+  background: var(--surface);
   border-radius: var(--radius-xl);
   padding: 32px;
+  border: 1px solid var(--border-soft);
   box-shadow: var(--shadow);
 }
 
@@ -254,22 +291,11 @@ a {
 }
 
 .sticker {
-  background: #fff;
-  border-radius: 22px 22px 22px 8px;
+  background: #faf8f1;
+  border-radius: var(--radius-md);
   padding: 16px;
-  border: 1px solid var(--border);
-  position: relative;
-}
-
-.sticker::after {
-  content: "";
-  position: absolute;
-  top: -8px;
-  right: 16px;
-  width: 24px;
-  height: 24px;
-  background: rgba(47, 107, 255, 0.2);
-  border-radius: 50%;
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow);
 }
 
 .kanban-board {
@@ -281,15 +307,15 @@ a {
 
 .kanban-column {
   background: var(--surface-soft);
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   padding: 14px;
   min-height: 220px;
 }
 
 .kanban-column.is-drop-target {
-  border-color: var(--blue);
-  background: #eef4ff;
+  border-color: var(--accent);
+  background: var(--accent-wash);
 }
 
 .kanban-column-header {
@@ -298,6 +324,18 @@ a {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.kanban-column-header strong {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.move-banner {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  padding: 14px 18px;
 }
 
 .prayer-card {
@@ -309,37 +347,49 @@ a {
 }
 
 .prayer-card.is-selected-move {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .kanban-column.is-move-target {
-  border-style: solid;
-  border-color: var(--blue);
-  background: #eef4ff;
+  border-color: var(--accent);
+  background: var(--accent-wash);
 }
 
 input,
 textarea,
 select {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   font-size: 14px;
-  background: #fff;
+  font-family: var(--font-sans);
+  background: #fbfaf4;
+  color: var(--ink);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
 }
 
 label {
   font-weight: 600;
   display: block;
   margin-bottom: 6px;
+  font-size: 14px;
 }
 
 footer {
   padding: 32px 20px 48px;
   text-align: center;
   color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
 }
 
 .footer-links {
@@ -350,6 +400,6 @@ footer {
 }
 
 .footer-links a {
-  color: var(--blue);
+  color: var(--accent);
   font-weight: 600;
 }

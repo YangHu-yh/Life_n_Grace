@@ -25,22 +25,23 @@ export default function GlobalError({
           minHeight: "100vh",
           margin: 0,
           padding: 24,
-          background: "#f6f7fb",
-          color: "#0b1f3a"
+          background: "#edeae1",
+          color: "#23211b"
         }}
       >
         <div
           style={{
             maxWidth: 440,
             textAlign: "center",
-            background: "#fff",
+            background: "#f6f4ec",
             padding: 32,
-            borderRadius: 16,
-            boxShadow: "0 10px 40px rgba(11, 31, 58, 0.12)"
+            borderRadius: 12,
+            border: "1px solid #ddd8ca",
+            boxShadow: "0 1px 3px rgba(35, 33, 27, 0.07)"
           }}
         >
           <h2 style={{ marginTop: 0 }}>We hit an unexpected error</h2>
-          <p style={{ color: "#5b6b82" }}>
+          <p style={{ color: "#57534a" }}>
             Please try again. If it keeps happening, refresh the page.
           </p>
           <button
@@ -48,10 +49,10 @@ export default function GlobalError({
             onClick={() => reset()}
             style={{
               border: "none",
-              borderRadius: 999,
+              borderRadius: 6,
               padding: "12px 24px",
-              background: "#0b1f3a",
-              color: "#fff",
+              background: "#33564a",
+              color: "#f3f1e8",
               fontWeight: 600,
               cursor: "pointer"
             }}
