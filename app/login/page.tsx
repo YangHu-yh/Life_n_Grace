@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const URL_MESSAGES: Record<string, string> = {
+  justSignedUp: "Account created. You can sign in.",
   verified: "Email verified! You can now sign in.",
   reset: "Password updated! Sign in with your new password.",
   invalid_token: "That verification link is invalid. Please sign up again or request a new link.",
@@ -26,7 +27,12 @@ export default function LoginPage() {
   useEffect(() => {
     // Read once on mount; avoids useSearchParams' Suspense requirement.
     const params = new URLSearchParams(window.location.search);
-    if (params.get("verified") === "1") setMessage(URL_MESSAGES.verified);
+    if (params.get("justSignedUp") === "1") {
+      // Prefer the server-worded message passed through from signup ("check
+      // your email" vs "you can sign in now"); rendered as a text node, so
+      // the query param carries no XSS risk.
+      setMessage(params.get("msg") || URL_MESSAGES.justSignedUp);
+    } else if (params.get("verified") === "1") setMessage(URL_MESSAGES.verified);
     else if (params.get("reset") === "1") setMessage(URL_MESSAGES.reset);
     else if (params.get("error")) {
       setMessage(URL_MESSAGES[params.get("error") ?? ""] ?? null);

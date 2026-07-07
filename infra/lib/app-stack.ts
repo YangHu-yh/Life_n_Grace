@@ -41,7 +41,14 @@ export class LifeNGraceAppStack extends cdk.Stack {
           .unsafeUnwrap(),
         APOLOGIST_API_KEY: base.appSecrets.secretValueFromJson("APOLOGIST_API_KEY").unsafeUnwrap(),
         APOLOGIST_API_URL: base.appSecrets.secretValueFromJson("APOLOGIST_API_URL").unsafeUnwrap(),
-        APOLOGIST_TRANSLATION: "esv"
+        APOLOGIST_TRANSLATION: "esv",
+        // Add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to the life-n-grace/app
+        // secret BEFORE the next `cdk deploy` — secretValueFromJson fails at
+        // deploy time if the JSON key is missing.
+        GOOGLE_CLIENT_ID: base.appSecrets.secretValueFromJson("GOOGLE_CLIENT_ID").unsafeUnwrap(),
+        GOOGLE_CLIENT_SECRET: base.appSecrets
+          .secretValueFromJson("GOOGLE_CLIENT_SECRET")
+          .unsafeUnwrap()
       }
     });
 

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -20,7 +22,13 @@ export default function SignupPage() {
         body: JSON.stringify({ email, password })
       });
       const data = await response.json();
-      setMessage(response.ok ? "Account created. You can sign in." : data.error);
+      if (response.ok) {
+        router.push(
+          `/login?justSignedUp=1&msg=${encodeURIComponent(data.message ?? "")}`
+        );
+        return;
+      }
+      setMessage(data.error);
     } catch {
       setMessage("Could not reach the server. Please try again.");
     } finally {

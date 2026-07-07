@@ -5,7 +5,7 @@
 ## Progress
 
 - [x] 1. Reminders DELETE
-- [ ] 2. Signup redirect + Google OAuth activation
+- [x] 2. Signup redirect + Google OAuth activation — code complete (incl. the `app-stack.ts` env lines); the ops/credentials checklist (Google Cloud Console client, Secrets Manager keys, `cdk deploy`, live round-trip check) is deferred to a session with AWS access. **Do not `cdk deploy` before adding `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to the `life-n-grace/app` secret.**
 - [ ] 3. Prayer Wall / Journal consistency fix
 - [ ] 4. Prayer topics + companion panel
 - [ ] `docs/project-plan.md` updated to v2.3 (mark done items, add new backlog)
