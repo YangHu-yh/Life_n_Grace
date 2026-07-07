@@ -15,6 +15,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Prisma needs openssl present to detect the platform at runtime; without it
+# detection falls back to openssl-1.1.x and the query engine fails to load.
+RUN apk add --no-cache openssl
+
 # The standalone server only needs the node binary. Removing npm (and the
 # tar/sigstore packages it vendors) eliminates their CVEs from image scans.
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn*

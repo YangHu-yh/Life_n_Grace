@@ -1,6 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../../generated/journal"
+  provider      = "prisma-client-js"
+  output        = "../../generated/journal"
+  // native for local dev; linux-musl-openssl-3.0.x for the Alpine Lambda image
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
