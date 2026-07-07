@@ -4,7 +4,7 @@
 
 ## Progress
 
-- [ ] 1. Reminders DELETE
+- [x] 1. Reminders DELETE
 - [ ] 2. Signup redirect + Google OAuth activation
 - [ ] 3. Prayer Wall / Journal consistency fix
 - [ ] 4. Prayer topics + companion panel

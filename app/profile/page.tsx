@@ -117,6 +117,32 @@ export default function ProfilePage() {
     }
   }
 
+  async function deleteReminder(reminderId: string) {
+    if (!window.confirm("Delete this reminder? This cannot be undone.")) {
+      return;
+    }
+    setReminderMessage(null);
+    const response = await fetch(`/api/profile/reminders/${reminderId}`, {
+      method: "DELETE"
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setReminderMessage(data.error ?? "Could not delete reminder.");
+      return;
+    }
+    if (reminderForm.id === reminderId) {
+      setReminderForm({
+        id: "",
+        channel: "email",
+        time: "07:30",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        enabled: true
+      });
+    }
+    setReminders((prev) => prev.filter((item) => item.id !== reminderId));
+    setReminderMessage("Reminder deleted.");
+  }
+
   async function savePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordMessage(null);
@@ -296,6 +322,13 @@ export default function ProfilePage() {
                     {reminder.time} ({reminder.timezone}){" "}
                     {reminder.enabled ? "- enabled" : "- disabled"}
                   </p>
+                  <button
+                    className="button button-outline button-danger"
+                    type="button"
+                    onClick={() => deleteReminder(reminder.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
