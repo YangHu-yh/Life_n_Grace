@@ -3,6 +3,7 @@ import { prismaMain } from "@/lib/db/main";
 import { prismaJournal } from "@/lib/db/journal";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { decryptText } from "@/lib/security/encryption";
+import { LANE_TO_JOURNAL_STATUS, type PrayerLane } from "@/lib/prayers/constants";
 
 function startOfTodayUtc() {
   const now = new Date();
@@ -56,17 +57,6 @@ export async function GET(request: NextRequest) {
     })
   ]);
 
-  const mappedJournals = journals.map((entry) => ({
-    id: entry.id,
-    title: entry.title,
-    content: decryptText(entry.ciphertext, entry.iv),
-    status: entry.status,
-    relatedPrayerId: entry.relatedPrayerId,
-    sourceLinks: entry.sourceLinks,
-    createdAt: entry.createdAt,
-    updatedAt: entry.updatedAt
-  }));
-
   const prayersWithResolvedLane = prayers.map((prayer) => {
     // Keep older BLOOM records in the accomplished column during transition.
     const lane =
@@ -75,6 +65,80 @@ export async function GET(request: NextRequest) {
         : prayer.lane;
     return { ...prayer, lane };
   });
+
+  // Read-time reconciliation: for linked entries the wall lane is canonical,
+  // so the derived status always wins over the stored one. Any drift found
+  // (missed cascade, pre-fix data) is repaired in the database so the two
+  // views converge without a manual migration.
+  const prayerById = new Map(prayersWithResolvedLane.map((p) => [p.id, p]));
+  const orphanedEntryIds: string[] = [];
+  const driftedIdsByStatus: Record<"ACTIVE" | "HISTORY", string[]> = {
+    ACTIVE: [],
+    HISTORY: []
+  };
+
+  const mappedJournals = journals.map((entry) => {
+    let status = entry.status as "ACTIVE" | "HISTORY";
+    let relatedPrayerId = entry.relatedPrayerId;
+    let orphaned = false;
+
+    if (relatedPrayerId) {
+      const linkedPrayer = prayerById.get(relatedPrayerId);
+      if (linkedPrayer) {
+        const effectiveStatus = LANE_TO_JOURNAL_STATUS[linkedPrayer.lane as PrayerLane];
+        if (effectiveStatus && effectiveStatus !== status) {
+          driftedIdsByStatus[effectiveStatus].push(entry.id);
+          status = effectiveStatus;
+        }
+      } else {
+        // The wall card is gone (deleted pre-fix, or a failed cascade) —
+        // detach so the entry stops claiming a link that no longer resolves.
+        orphaned = true;
+        orphanedEntryIds.push(entry.id);
+        relatedPrayerId = null;
+      }
+    }
+
+    return {
+      id: entry.id,
+      title: entry.title,
+      content: decryptText(entry.ciphertext, entry.iv),
+      status,
+      relatedPrayerId,
+      ownsLinkedPrayer: relatedPrayerId ? entry.ownsLinkedPrayer : false,
+      orphaned,
+      sourceLinks: entry.sourceLinks,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt
+    };
+  });
+
+  // Persist the repairs (best-effort — the response above is already
+  // consistent either way, and the next load retries).
+  try {
+    const repairs: Array<Promise<unknown>> = [];
+    for (const targetStatus of ["ACTIVE", "HISTORY"] as const) {
+      if (driftedIdsByStatus[targetStatus].length) {
+        repairs.push(
+          prismaJournal.journalEntry.updateMany({
+            where: { id: { in: driftedIdsByStatus[targetStatus] }, userId },
+            data: { status: targetStatus }
+          })
+        );
+      }
+    }
+    if (orphanedEntryIds.length) {
+      repairs.push(
+        prismaJournal.journalEntry.updateMany({
+          where: { id: { in: orphanedEntryIds }, userId },
+          data: { relatedPrayerId: null, ownsLinkedPrayer: false }
+        })
+      );
+    }
+    if (repairs.length) await Promise.all(repairs);
+  } catch (error) {
+    console.error("[GET /api/prayers/overview] drift repair failed", error);
+  }
 
   const prayerBoard = {
     active: prayersWithResolvedLane.filter((prayer) => prayer.lane === "ACTIVE"),

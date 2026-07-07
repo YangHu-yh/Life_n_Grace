@@ -23,13 +23,22 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     // Journal entries live in a separate database with no cross-DB foreign
-    // key — detach any entries that referenced this prayer.
-    await prismaJournal.journalEntry.updateMany({
-      where: { relatedPrayerId: prayerId, userId },
-      data: { relatedPrayerId: null }
-    });
+    // key — detach any entries that referenced this prayer. The prayer's own
+    // delete already committed, so a detach failure downgrades to a warning
+    // and is repaired by the overview route's reconciliation.
+    let syncWarning: string | undefined;
+    try {
+      await prismaJournal.journalEntry.updateMany({
+        where: { relatedPrayerId: prayerId, userId },
+        data: { relatedPrayerId: null, ownsLinkedPrayer: false }
+      });
+    } catch (error) {
+      console.error("[DELETE /api/prayers/[id]] journal detach failed", error);
+      syncWarning =
+        "Prayer card deleted, but its journal entry could not be unlinked yet. It will self-correct on the next reload.";
+    }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(syncWarning ? { ok: true, syncWarning } : { ok: true });
   } catch (error) {
     console.error("[DELETE /api/prayers/[id]]", error);
     return NextResponse.json(

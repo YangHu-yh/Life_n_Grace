@@ -18,6 +18,9 @@ model JournalEntry {
   iv             String
   status         JournalStatus @default(ACTIVE)
   relatedPrayerId String?
+  // True only when the auto-create path made the linked PrayerRequest for
+  // this entry; controls whether deleting the entry cascades to the prayer.
+  ownsLinkedPrayer Boolean     @default(false)
   sourceLinks    Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

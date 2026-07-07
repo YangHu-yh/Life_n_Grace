@@ -20,3 +20,12 @@ export const LEGACY_STAGE_TO_LANE: Record<string, PrayerLane> = {
   SPROUT: "ACTIVE",
   BLOOM: "ACCOMPLISHED"
 };
+
+// The wall's 4-lane state is canonical for linked journal entries; the
+// journal's 2-state status is derived from it (REROUTED counts as HISTORY).
+export const LANE_TO_JOURNAL_STATUS: Record<PrayerLane, "ACTIVE" | "HISTORY"> = {
+  ACTIVE: "ACTIVE",
+  ACCOMPLISHED: "HISTORY",
+  REROUTED: "HISTORY",
+  PRAISE: "HISTORY"
+};

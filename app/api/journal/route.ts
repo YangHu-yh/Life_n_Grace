@@ -6,6 +6,7 @@ import { decryptText, encryptText } from "@/lib/security/encryption";
 import { LIMITS, lengthError } from "@/lib/validation";
 import {
   isPrayerLane,
+  LANE_TO_JOURNAL_STATUS,
   LANE_TO_LEGACY_STAGE,
   type PrayerLane
 } from "@/lib/prayers/constants";
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
   }
   const safeSourceLinks =
     Array.isArray(sourceLinks) || sourceLinks === undefined ? sourceLinks : null;
-  const journalStatus = status ?? "ACTIVE";
+  let journalStatus: "ACTIVE" | "HISTORY" = status ?? "ACTIVE";
   const prayerLane: PrayerLane = isPrayerLane(lane)
     ? lane
     : journalStatus === "HISTORY"
@@ -82,6 +83,23 @@ export async function POST(request: NextRequest) {
   let finalRelatedPrayerId: string | null = relatedPrayerId
     ? String(relatedPrayerId)
     : null;
+  let ownsLinkedPrayer = false;
+
+  // Linking to an existing wall card: the card must exist and belong to this
+  // user, and the entry's status derives from the card's lane (lane is
+  // canonical for linked entries).
+  if (finalRelatedPrayerId) {
+    const linkedPrayer = await prismaMain.prayerRequest.findFirst({
+      where: { id: finalRelatedPrayerId, userId }
+    });
+    if (!linkedPrayer) {
+      return NextResponse.json(
+        { error: "Linked prayer card not found." },
+        { status: 400 }
+      );
+    }
+    journalStatus = LANE_TO_JOURNAL_STATUS[linkedPrayer.lane as PrayerLane] ?? "ACTIVE";
+  }
 
   // When no linked prayer: create both PrayerRequest and JournalEntry so the
   // prayer journal appears on both the Prayer wall and the Journal workspace.
@@ -97,6 +115,7 @@ export async function POST(request: NextRequest) {
       }
     });
     finalRelatedPrayerId = prayer.id;
+    ownsLinkedPrayer = true;
   }
 
   const encrypted = encryptText(content);
@@ -108,6 +127,7 @@ export async function POST(request: NextRequest) {
       iv: encrypted.iv,
       status: journalStatus,
       relatedPrayerId: finalRelatedPrayerId,
+      ownsLinkedPrayer,
       sourceLinks: safeSourceLinks ?? undefined
     }
   });

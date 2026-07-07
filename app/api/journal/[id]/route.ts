@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prismaJournal } from "@/lib/db/journal";
+import { prismaMain } from "@/lib/db/main";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { decryptText, encryptText } from "@/lib/security/encryption";
 import { LIMITS, lengthError } from "@/lib/validation";
@@ -87,6 +88,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id: journalId } = await context.params;
+    // Fetch first: relatedPrayerId / ownsLinkedPrayer decide whether the
+    // delete cascades to the wall card in the main database.
+    const existing = await prismaJournal.journalEntry.findFirst({
+      where: { id: journalId, userId },
+      select: { relatedPrayerId: true, ownsLinkedPrayer: true }
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+
     const deleted = await prismaJournal.journalEntry.deleteMany({
       where: { id: journalId, userId }
     });
@@ -94,7 +105,28 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true });
+    // The entry's own delete committed; cascade failures downgrade to a
+    // warning and are repaired by the overview route's reconciliation.
+    let syncWarning: string | undefined;
+    if (existing.ownsLinkedPrayer && existing.relatedPrayerId) {
+      try {
+        await prismaMain.prayerRequest.deleteMany({
+          where: { id: existing.relatedPrayerId, userId }
+        });
+        // Any other entries that pointed at the now-deleted card become
+        // orphans — detach them.
+        await prismaJournal.journalEntry.updateMany({
+          where: { relatedPrayerId: existing.relatedPrayerId, userId },
+          data: { relatedPrayerId: null, ownsLinkedPrayer: false }
+        });
+      } catch (error) {
+        console.error("[DELETE /api/journal/[id]] prayer cascade failed", error);
+        syncWarning =
+          "Journal entry deleted, but its wall card could not be removed yet. It will self-correct on the next reload.";
+      }
+    }
+
+    return NextResponse.json(syncWarning ? { ok: true, syncWarning } : { ok: true });
   } catch (error) {
     console.error("[DELETE /api/journal/[id]]", error);
     return NextResponse.json(

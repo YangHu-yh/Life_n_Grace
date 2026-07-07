@@ -21,9 +21,26 @@ type JournalEntry = {
   content: string;
   status: "ACTIVE" | "HISTORY";
   relatedPrayerId: string | null;
+  ownsLinkedPrayer?: boolean;
+  orphaned?: boolean;
   sourceLinks: unknown;
   createdAt: string;
   updatedAt: string;
+};
+
+type ViewMode = "columns" | "list" | "rows";
+
+const VIEW_MODES: Array<{ key: ViewMode; label: string }> = [
+  { key: "columns", label: "Columns" },
+  { key: "list", label: "List" },
+  { key: "rows", label: "Rows" }
+];
+
+const LANE_LABELS: Record<PrayerLane, string> = {
+  ACTIVE: "Active",
+  ACCOMPLISHED: "Accomplished",
+  REROUTED: "Re-routed",
+  PRAISE: "Praise"
 };
 
 type HabitSummary = {
@@ -110,6 +127,7 @@ export default function PrayersPage() {
   const [journalFilter, setJournalFilter] = useState<
     "all" | "active" | "history" | "prayer-linked"
   >("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("columns");
 
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
   const [journalTitle, setJournalTitle] = useState("");
@@ -156,6 +174,32 @@ export default function PrayersPage() {
     return allJournals;
   }, [journalFilter, activeJournals, historyJournals, allJournals]);
 
+  // list/rows modes interleave prayers with their linked journal entries in
+  // one list (newest prayers first), with journal-only entries at the end.
+  const journalsByPrayerId = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const entry of allJournals) {
+      if (!entry.relatedPrayerId) continue;
+      const list = map.get(entry.relatedPrayerId) ?? [];
+      list.push(entry);
+      map.set(entry.relatedPrayerId, list);
+    }
+    return map;
+  }, [allJournals]);
+
+  const unlinkedJournals = useMemo(
+    () => allJournals.filter((entry) => !entry.relatedPrayerId),
+    [allJournals]
+  );
+
+  const prayersNewestFirst = useMemo(
+    () =>
+      [...allPrayers].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
+    [allPrayers]
+  );
+
   async function loadOverview() {
     const response = await fetch("/api/prayers/overview");
     if (response.status === 401) {
@@ -182,7 +226,8 @@ export default function PrayersPage() {
   }
 
   // Optimistic: move the card in local state immediately, roll back if the
-  // request fails. No full board reload on success.
+  // request fails. On success a non-blocking reload picks up the linked
+  // journal entry's cascaded status.
   async function updatePrayerLane(
     prayerId: string,
     lane: PrayerLane
@@ -209,11 +254,15 @@ export default function PrayersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: prayerId, lane })
       });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         setPrayerBoard(previousBoard);
         setNotice(data.error ?? "Could not move prayer card.");
+        return;
       }
+      if (data.syncWarning) setNotice(data.syncWarning);
+      // Linked journal statuses follow the lane — refresh without blocking.
+      void loadOverview();
     } catch {
       setPrayerBoard(previousBoard);
       setNotice("Could not reach the server. The card was not moved.");
@@ -317,13 +366,13 @@ export default function PrayersPage() {
       return;
     }
     const response = await fetch(`/api/prayers/${prayerId}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
       setNotice(data.error ?? "Could not delete prayer card.");
       return;
     }
     if (selectedForMove === prayerId) setSelectedForMove(null);
-    setNotice("Prayer card deleted.");
+    setNotice(data.syncWarning ?? "Prayer card deleted.");
     await loadOverview();
   }
 
@@ -332,12 +381,12 @@ export default function PrayersPage() {
       return;
     }
     const response = await fetch(`/api/journal/${journalId}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
       setNotice(data.error ?? "Could not delete journal entry.");
       return;
     }
-    setNotice("Journal entry deleted.");
+    setNotice(data.syncWarning ?? "Journal entry deleted.");
     await loadOverview();
   }
 
@@ -345,12 +394,35 @@ export default function PrayersPage() {
     setIsJournalModalOpen(true);
   }
 
-  function togglePrayerCardCollapsed(prayerId: string) {
-    setCollapsedPrayerCards((prev) => ({ ...prev, [prayerId]: !prev[prayerId] }));
+  // Takes the current *effective* collapsed state — in rows mode cards are
+  // collapsed by default without a stored entry, so flipping the raw stored
+  // value would be a no-op on first click.
+  function togglePrayerCardCollapsed(prayerId: string, currentlyCollapsed: boolean) {
+    setCollapsedPrayerCards((prev) => ({ ...prev, [prayerId]: !currentlyCollapsed }));
   }
 
-  function toggleJournalCardCollapsed(entryId: string) {
-    setCollapsedJournalCards((prev) => ({ ...prev, [entryId]: !prev[entryId] }));
+  function toggleJournalCardCollapsed(entryId: string, currentlyCollapsed: boolean) {
+    setCollapsedJournalCards((prev) => ({ ...prev, [entryId]: !currentlyCollapsed }));
+  }
+
+  function expandAllCards() {
+    // Explicit false (not just clearing) so rows mode's collapsed-by-default
+    // cards expand too.
+    setCollapsedPrayerCards(
+      Object.fromEntries(allPrayers.map((prayer) => [prayer.id, false]))
+    );
+    setCollapsedJournalCards(
+      Object.fromEntries(allJournals.map((entry) => [entry.id, false]))
+    );
+  }
+
+  function collapseAllCards() {
+    setCollapsedPrayerCards(
+      Object.fromEntries(allPrayers.map((prayer) => [prayer.id, true]))
+    );
+    setCollapsedJournalCards(
+      Object.fromEntries(allJournals.map((entry) => [entry.id, true]))
+    );
   }
 
   async function createJournalEntry(event: React.FormEvent<HTMLFormElement>) {
@@ -447,6 +519,211 @@ export default function PrayersPage() {
     ? allPrayers.find((item) => item.id === selectedForMove) ?? null
     : null;
 
+  function renderPrayerCard(
+    prayer: Prayer,
+    options: { compact?: boolean; draggable?: boolean } = {}
+  ) {
+    const { compact = false, draggable = true } = options;
+    // rows mode starts collapsed; an explicit toggle always wins.
+    const isCollapsed = collapsedPrayerCards[prayer.id] ?? compact;
+    return (
+      <div
+        key={prayer.id}
+        className={`sticker prayer-card ${
+          selectedForMove === prayer.id ? "is-selected-move" : ""
+        }`}
+        draggable={draggable}
+        onDragStart={
+          draggable ? (event) => handlePrayerDragStart(event, prayer.id) : undefined
+        }
+        onDragEnd={draggable ? handlePrayerDragEnd : undefined}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 10,
+            flexWrap: "wrap"
+          }}
+        >
+          <strong style={{ flex: "1 1 140px" }}>{prayer.topic}</strong>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+            {!draggable && <span className="pill">{LANE_LABELS[prayer.lane]}</span>}
+            {draggable && (
+              <button
+                className={`button ${
+                  selectedForMove === prayer.id ? "" : "button-outline"
+                }`}
+                type="button"
+                style={{ padding: "6px 12px" }}
+                onClick={() =>
+                  setSelectedForMove(selectedForMove === prayer.id ? null : prayer.id)
+                }
+              >
+                {selectedForMove === prayer.id ? "Moving…" : "Move"}
+              </button>
+            )}
+            <button
+              className="button button-outline"
+              type="button"
+              style={{ padding: "6px 12px" }}
+              onClick={() => togglePrayerCardCollapsed(prayer.id, isCollapsed)}
+            >
+              {isCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+        </div>
+        {isCollapsed ? (
+          <p className="muted">
+            {prayer.notes ? prayer.notes.slice(0, 80) : "No notes yet."}
+          </p>
+        ) : (
+          <>
+            {prayer.notes && <p className="muted">{prayer.notes}</p>}
+            <p className="muted" style={{ margin: "6px 0 0" }}>
+              Prayed {prayer.prayerCount ?? 0} time
+              {(prayer.prayerCount ?? 0) === 1 ? "" : "s"}
+              {prayer.lastPrayedAt && ` · last ${shortDate(prayer.lastPrayedAt)}`}
+            </p>
+            <small className="muted" style={{ display: "block" }}>
+              Added {shortDate(prayer.createdAt)}
+            </small>
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              <button
+                className="button button-outline"
+                type="button"
+                onClick={() => {
+                  void markPrayerPrayed(prayer.id);
+                }}
+              >
+                I prayed this
+              </button>
+              <div>
+                <label htmlFor={`lane-${prayer.id}`}>Move card</label>
+                <select
+                  id={`lane-${prayer.id}`}
+                  value={prayer.lane}
+                  onChange={(event) => {
+                    void movePrayerWithSelect(event, prayer.id);
+                  }}
+                >
+                  <option value="ACTIVE">Active prayers</option>
+                  <option value="ACCOMPLISHED">Prayers accomplished</option>
+                  <option value="REROUTED">Prayers re-routed</option>
+                  <option value="PRAISE">Praise / gratitude</option>
+                </select>
+              </div>
+              <button
+                className="button button-outline button-danger"
+                type="button"
+                onClick={() => {
+                  void deletePrayer(prayer.id);
+                }}
+              >
+                Delete card
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function renderJournalCard(
+    entry: JournalEntry,
+    options: { nested?: boolean; compact?: boolean } = {}
+  ) {
+    const { nested = false, compact = false } = options;
+    const isCollapsed = collapsedJournalCards[entry.id] ?? compact;
+    const isLinked = !!entry.relatedPrayerId;
+    return (
+      <div
+        key={entry.id}
+        className="card-soft"
+        style={nested ? { marginLeft: 20 } : undefined}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12
+          }}
+        >
+          <div>
+            <strong>{entry.title}</strong>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              {nested && "Journal entry · "}
+              {entry.status}
+              {isLinked && " · follows its wall card"}
+            </p>
+          </div>
+          <button
+            className="button button-outline"
+            type="button"
+            style={{ padding: "6px 12px" }}
+            onClick={() => toggleJournalCardCollapsed(entry.id, isCollapsed)}
+          >
+            {isCollapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+        {isCollapsed ? (
+          <p className="muted">{entry.content.slice(0, 100)}</p>
+        ) : (
+          <>
+            <p style={{ whiteSpace: "pre-wrap" }}>{entry.content}</p>
+            {isLinked && !nested && (
+              <p className="muted">
+                Linked to wall card:{" "}
+                {allPrayers.find((p) => p.id === entry.relatedPrayerId)?.topic ??
+                  entry.relatedPrayerId}
+              </p>
+            )}
+            {entry.orphaned && (
+              <p className="muted">
+                The wall card this entry was linked to no longer exists, so the
+                link was removed.
+              </p>
+            )}
+            <small className="muted" style={{ display: "block" }}>
+              Added {shortDate(entry.createdAt)}
+            </small>
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {isLinked ? (
+                <span className="pill">
+                  Status follows the wall card&apos;s lane
+                </span>
+              ) : (
+                <button
+                  className="button button-outline"
+                  type="button"
+                  onClick={() =>
+                    updateJournalStatus(
+                      entry.id,
+                      entry.status === "ACTIVE" ? "HISTORY" : "ACTIVE"
+                    )
+                  }
+                >
+                  Mark {entry.status === "ACTIVE" ? "History" : "Active"}
+                </button>
+              )}
+              <button
+                className="button button-outline button-danger"
+                type="button"
+                onClick={() => {
+                  void deleteJournalEntry(entry.id);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <section className="grid">
       <div className="hero-panel">
@@ -494,7 +771,74 @@ export default function PrayersPage() {
       )}
 
       <div className="card">
-        <h3>Prayer wall</h3>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12,
+            flexWrap: "wrap"
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>
+            {viewMode === "columns" ? "Prayer wall" : "Prayer wall & journal"}
+          </h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {VIEW_MODES.map((mode) => (
+              <button
+                key={mode.key}
+                className={`button ${viewMode === mode.key ? "" : "button-outline"}`}
+                type="button"
+                style={{ padding: "6px 12px" }}
+                onClick={() => setViewMode(mode.key)}
+              >
+                {mode.label}
+              </button>
+            ))}
+            <button
+              className="button button-outline"
+              type="button"
+              style={{ padding: "6px 12px" }}
+              onClick={expandAllCards}
+            >
+              Expand all
+            </button>
+            <button
+              className="button button-outline"
+              type="button"
+              style={{ padding: "6px 12px" }}
+              onClick={collapseAllCards}
+            >
+              Collapse all
+            </button>
+          </div>
+        </div>
+        {viewMode !== "columns" && (
+          <div className="grid" style={{ marginTop: 16, gap: viewMode === "rows" ? 8 : 12 }}>
+            {prayersNewestFirst.map((prayer) => (
+              <div key={prayer.id} className="grid" style={{ gap: 8 }}>
+                {renderPrayerCard(prayer, {
+                  compact: viewMode === "rows",
+                  draggable: false
+                })}
+                {(journalsByPrayerId.get(prayer.id) ?? []).map((entry) =>
+                  renderJournalCard(entry, {
+                    nested: true,
+                    compact: viewMode === "rows"
+                  })
+                )}
+              </div>
+            ))}
+            {unlinkedJournals.map((entry) =>
+              renderJournalCard(entry, { compact: viewMode === "rows" })
+            )}
+            {!prayersNewestFirst.length && !unlinkedJournals.length && (
+              <p className="muted">No prayers or journal entries yet.</p>
+            )}
+          </div>
+        )}
+        {viewMode === "columns" && (
+          <>
         <p className="muted">
           On desktop, drag a card between lanes. On any device, tap{" "}
           <strong>Move</strong> on a card, then <strong>Move here</strong> on a lane.
@@ -538,106 +882,7 @@ export default function PrayersPage() {
                 </button>
               )}
               <div className="grid" style={{ gap: 12 }}>
-                {prayerBoard[lane.key].map((prayer) => (
-                  <div
-                    key={prayer.id}
-                    className={`sticker prayer-card ${
-                      selectedForMove === prayer.id ? "is-selected-move" : ""
-                    }`}
-                    draggable
-                    onDragStart={(event) => handlePrayerDragStart(event, prayer.id)}
-                    onDragEnd={handlePrayerDragEnd}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 10,
-                        flexWrap: "wrap"
-                      }}
-                    >
-                      <strong style={{ flex: "1 1 140px" }}>{prayer.topic}</strong>
-                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <button
-                          className={`button ${
-                            selectedForMove === prayer.id ? "" : "button-outline"
-                          }`}
-                          type="button"
-                          style={{ padding: "6px 12px" }}
-                          onClick={() =>
-                            setSelectedForMove(
-                              selectedForMove === prayer.id ? null : prayer.id
-                            )
-                          }
-                        >
-                          {selectedForMove === prayer.id ? "Moving…" : "Move"}
-                        </button>
-                        <button
-                          className="button button-outline"
-                          type="button"
-                          style={{ padding: "6px 12px" }}
-                          onClick={() => togglePrayerCardCollapsed(prayer.id)}
-                        >
-                          {collapsedPrayerCards[prayer.id] ? "Expand" : "Collapse"}
-                        </button>
-                      </div>
-                    </div>
-                    {collapsedPrayerCards[prayer.id] ? (
-                      <p className="muted">
-                        {prayer.notes ? prayer.notes.slice(0, 80) : "No notes yet."}
-                      </p>
-                    ) : (
-                      <>
-                        {prayer.notes && <p className="muted">{prayer.notes}</p>}
-                        <p className="muted" style={{ margin: "6px 0 0" }}>
-                          Prayed {prayer.prayerCount ?? 0} time
-                          {(prayer.prayerCount ?? 0) === 1 ? "" : "s"}
-                          {prayer.lastPrayedAt &&
-                            ` · last ${shortDate(prayer.lastPrayedAt)}`}
-                        </p>
-                        <small className="muted" style={{ display: "block" }}>
-                          Added {shortDate(prayer.createdAt)}
-                        </small>
-                        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                          <button
-                            className="button button-outline"
-                            type="button"
-                            onClick={() => {
-                              void markPrayerPrayed(prayer.id);
-                            }}
-                          >
-                            I prayed this
-                          </button>
-                          <div>
-                            <label htmlFor={`lane-${prayer.id}`}>Move card</label>
-                            <select
-                              id={`lane-${prayer.id}`}
-                              value={prayer.lane}
-                              onChange={(event) => {
-                                void movePrayerWithSelect(event, prayer.id);
-                              }}
-                            >
-                              <option value="ACTIVE">Active prayers</option>
-                              <option value="ACCOMPLISHED">Prayers accomplished</option>
-                              <option value="REROUTED">Prayers re-routed</option>
-                              <option value="PRAISE">Praise / gratitude</option>
-                            </select>
-                          </div>
-                          <button
-                            className="button button-outline button-danger"
-                            type="button"
-                            onClick={() => {
-                              void deletePrayer(prayer.id);
-                            }}
-                          >
-                            Delete card
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
+                {prayerBoard[lane.key].map((prayer) => renderPrayerCard(prayer))}
                 {!prayerBoard[lane.key].length && (
                   <p className="muted">{lane.emptyText}</p>
                 )}
@@ -645,8 +890,11 @@ export default function PrayersPage() {
             </div>
           ))}
         </div>
+          </>
+        )}
       </div>
 
+      {viewMode === "columns" && (
       <div className="card">
         <div
           style={{
@@ -708,71 +956,7 @@ export default function PrayersPage() {
           </button>
         </div>
         <div className="grid" style={{ marginTop: 16 }}>
-          {filteredJournals.map((entry) => (
-            <div key={entry.id} className="card-soft">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 12
-                }}
-              >
-                <div>
-                  <strong>{entry.title}</strong>
-                  <p className="muted" style={{ margin: "4px 0 0" }}>
-                    {entry.status}
-                  </p>
-                </div>
-                <button
-                  className="button button-outline"
-                  type="button"
-                  style={{ padding: "6px 12px" }}
-                  onClick={() => toggleJournalCardCollapsed(entry.id)}
-                >
-                  {collapsedJournalCards[entry.id] ? "Expand" : "Collapse"}
-                </button>
-              </div>
-              {collapsedJournalCards[entry.id] ? (
-                <p className="muted">{entry.content.slice(0, 100)}</p>
-              ) : (
-                <>
-                  <p style={{ whiteSpace: "pre-wrap" }}>{entry.content}</p>
-                  {entry.relatedPrayerId && (
-                    <p className="muted">
-                      Linked to wall card: {allPrayers.find((p) => p.id === entry.relatedPrayerId)?.topic ?? entry.relatedPrayerId}
-                    </p>
-                  )}
-                  <small className="muted" style={{ display: "block" }}>
-                    Added {shortDate(entry.createdAt)}
-                  </small>
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      className="button button-outline"
-                      type="button"
-                      onClick={() =>
-                        updateJournalStatus(
-                          entry.id,
-                          entry.status === "ACTIVE" ? "HISTORY" : "ACTIVE"
-                        )
-                      }
-                    >
-                      Mark {entry.status === "ACTIVE" ? "History" : "Active"}
-                    </button>
-                    <button
-                      className="button button-outline button-danger"
-                      type="button"
-                      onClick={() => {
-                        void deleteJournalEntry(entry.id);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+          {filteredJournals.map((entry) => renderJournalCard(entry))}
           {!filteredJournals.length && (
             <div className="card-soft">
               <p className="muted">No prayer journal entries for this filter.</p>
@@ -783,6 +967,7 @@ export default function PrayersPage() {
           )}
         </div>
       </div>
+      )}
 
       <div className="card">
         <h3>Prayer day streak</h3>
