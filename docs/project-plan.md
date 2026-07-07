@@ -1,7 +1,22 @@
 # Life-n-Grace — Project Plan
 
-**Version:** 2.2 — Post-Sprint-3 Review  
-**Date:** 2026-07-05 (v2.1: 2026-07-04 · v2.0: 2026-05-06)  
+**Version:** 2.3 — Post-Demo Fixes  
+**Date:** 2026-07-07 (v2.2: 2026-07-05 · v2.1: 2026-07-04 · v2.0: 2026-05-06)  
+
+> **v2.3 changes (2026-07-07):** see [post-demo-fix-plan-v2.3.md](post-demo-fix-plan-v2.3.md) for the full plan.
+> - **Shipped:** AWS demo deployment live (Lambda + Function URL, all `P0-AWS-*`
+>   items); **R11 closed** — Apologist companion activated end-to-end (NAT
+>   instance for Lambda outbound + dashboard-format API key/URL quirks resolved,
+>   secrets set, streaming verified live).
+> - **New shipped fixes (this cycle, ICE-scored in §3 v2.3 table):** reminders
+>   DELETE; signup→login redirect; Google OAuth env wiring in CDK (ops checklist
+>   pending credentials); Prayer Wall/Journal consistency (lane-canonical
+>   cascade + read-time reconciliation + `ownsLinkedPrayer` + backfill script);
+>   prayer topics pages + slide-out companion panel + companion rate limit.
+> - **P4-5 superseded:** full database merge rejected again in favor of the
+>   dual-write-cascade + reconciliation fix — see §3 P4 note.
+> - **New backlog:** custom domain (Route53 + CloudFront) so the Google OAuth
+>   redirect URI survives Lambda/stack recreation — low priority, not built now.
 
 > **v2.2 changes (2026-07-05):**
 > - **Status:** Sprints 1–3 complete and CI-green (~2 sprints ahead of the v2.1
@@ -105,7 +120,12 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 
 ---
 
-### P0 — AWS Demo Deployment + CI/CD (Must Have, weeks 1–2) ⬆ promoted from P1
+### ✅ P0 — AWS Demo Deployment + CI/CD (DONE — demo live on Lambda + Function URL)
+
+> **All items below shipped as of v2.3 (2026-07-07).** Remember for redeploys:
+> `cdk deploy` alone does **not** pick up new ECR image pushes or Secrets
+> Manager value changes (CloudFormation dynamic-reference caching) — rebuild,
+> push, then `aws lambda update-function-code`.
 
 | # | Item | Impact | Conf | Ease | ICE | Spec |
 |---|------|--------|------|------|-----|------|
@@ -182,8 +202,25 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 | P3-5 | Add API versioning (`/api/v1/`) via Next.js route groups | 5 | 8 | 6 | **6.3** | S6 |
 | P3-6 | Add streak celebration UI (milestone cards at 7, 30, 100 days) | 7 | 7 | 6 | **6.7** | S7 |
 | P3-7 | Add privacy policy page and cookie notice (required before any public launch) | 8 | 10 | 7 | **8.3** | S5 |
+| P3-8 | Custom domain for the app (Route53 + CloudFront in front of the Function URL) so the Google OAuth redirect URI never needs re-registering after a stack recreation | 6 | 9 | 5 | **6.7** | Backlog (v2.3, see R12) |
 
 > `app/policy/page.tsx` already exists — verify content is legally sufficient.
+
+---
+
+### v2.3 — Post-Demo Fixes (from live-testing feedback, 2026-07-07)
+
+Sequenced and specified in [post-demo-fix-plan-v2.3.md](post-demo-fix-plan-v2.3.md).
+Reprioritized above the original ICE placement by the mission-statement pillars
+(Consistency / Visualize Faithfulness / Suggest Scripture).
+
+| # | Item | Impact | Conf | Ease | ICE | Status |
+|---|------|--------|------|------|-----|--------|
+| V23-1 | Reminders DELETE (`/api/profile/reminders/[id]` + profile UI) | 6 | 10 | 9 | **8.3** | ✅ Shipped |
+| V23-2 | Signup redirects to `/login` with pass-through message | 6 | 10 | 9 | **8.3** | ✅ Shipped |
+| V23-3 | Google OAuth activation — CDK env wiring shipped; ops checklist (Google Cloud client, Secrets Manager keys, deploy, live round-trip) pending credentials | 8 | 9 | 6 | **7.7** | 🔶 Code done, ops pending |
+| V23-4 | Prayer Wall / Journal consistency — lane-canonical cascade, read-time reconciliation, `ownsLinkedPrayer` delete semantics, view modes, backfill script (run against RDS pending) | 9 | 9 | 4 | **7.3** | ✅ Shipped (RDS `db push` + backfill pending) |
+| V23-5 | Prayer topics pages + slide-out companion panel + companion rate limit | 8 | 8 | 5 | **7.0** | ✅ Shipped |
 
 ---
 
@@ -195,7 +232,7 @@ Ease       1–10  (inverse effort: 10 = trivial, 1 = very hard)
 | P4-2 | GraphQL layer | REST is sufficient at this scale |
 | P4-3 | Social/community prayer sharing | Requires moderation infrastructure |
 | P4-4 | Native mobile app (React Native) | Web-first until product-market fit proven |
-| P4-5 | Merge dual databases into one | Acceptable risk tradeoff; keep as architectural decision |
+| P4-5 | Merge dual databases into one | **Superseded (v2.3):** full merge rejected again after real usage exposed the sync UX problem — fixed instead with the lane-canonical dual-write cascade + read-time reconciliation (post-demo fix plan §3), preserving the deliberate encryption/security boundary between the two databases |
 | P4-6 | HATEOAS `_links` | Over-engineered for this API surface |
 
 ---
@@ -339,7 +376,8 @@ Context: single-developer cadence, 1-week sprints. **Milestone: partner-demoable
 | R8 | Public demo URL exposed with minimal auth (no email verification, no MFA) | Medium | High | **Mitigate** — rate limiting (P0-2) before URL exists; manually provisioned demo accounts only; auth overhaul in Sprint 4 before any public signup push |
 | R9 | Demo-tier single-instance RDS = no failover during a partner demo | Low | Medium | **Accept** for demo period — 7-day backups on; upgrade to Multi-AZ in production-tier upgrade (Sprint 5+) |
 | R10 | Lambda cold start (~2–4s) on first request in front of a partner | Medium | Low | **Mitigate** — warm the app before handing over; provisioned concurrency (1 instance) for demo hours if needed |
-| R11 | Companion feature dark until Apologist key + NAT are added (Lambda has no outbound internet in VPC) | High (short-term) | Medium | **Accept** knowingly — route already returns a friendly "not yet available"; activation is a documented 3-step change (NAT, secrets, redeploy) |
+| R11 | ~~Companion feature dark until Apologist key + NAT are added~~ | — | — | ✅ **Closed 2026-07-06** — NAT instance (t4g.nano) added for Lambda outbound, Apologist dashboard-format key/URL quirks resolved, `APOLOGIST_*` secrets set, streaming verified live end-to-end |
+| R12 | Lambda Function URL changes if the Lambda/stack is recreated — would invalidate the Google OAuth redirect URI registered in Google Cloud Console | Low | Medium | **Mitigate later** — new backlog item P3-8 (custom domain via Route53 + CloudFront); until then, re-register the redirect URI after any stack recreation |
 
 ---
 
