@@ -19,14 +19,20 @@ export class LifeNGraceBaseStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // ── VPC — demo tier: no NAT gateway (Lambda has no outbound internet
-    // until the Apologist key needs it; see aws-cicd-spec §0) ─────────────
+    // ── VPC — Apologist activation needs outbound internet for the Lambda,
+    // so App subnets route through a single NAT instance (t4g.nano) rather
+    // than a managed NAT Gateway, to keep the demo tier cheap. ────────────
+    const natGatewayProvider = ec2.NatProvider.instanceV2({
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO)
+    });
+
     this.vpc = new ec2.Vpc(this, "Vpc", {
       maxAzs: 2,
-      natGateways: 0,
+      natGateways: 1,
+      natGatewayProvider,
       subnetConfiguration: [
         { name: "Public", subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
-        { name: "App", subnetType: ec2.SubnetType.PRIVATE_ISOLATED, cidrMask: 24 }
+        { name: "App", subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 }
       ]
     });
 

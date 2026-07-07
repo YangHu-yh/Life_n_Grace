@@ -8,14 +8,13 @@ export type ApologistMessage = {
 function getConfig() {
   const apiKey = process.env.APOLOGIST_API_KEY;
   const apiUrl = process.env.APOLOGIST_API_URL;
-  const modelId = process.env.APOLOGIST_MODEL_ID ?? "gpt-4o";
 
   if (!apiKey || !apiUrl) {
     throw new Error("APOLOGIST_API_KEY or APOLOGIST_API_URL is not configured");
   }
 
   const base = apiUrl.replace(/\/$/, "");
-  return { apiKey, base, modelId };
+  return { apiKey, base };
 }
 
 function buildSystemPrompt(prayerContext?: { topic: string; notes?: string }): string {
@@ -34,7 +33,7 @@ export async function generatePrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }
 ): Promise<string> {
-  const { apiKey, base, modelId } = getConfig();
+  const { apiKey, base } = getConfig();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -45,8 +44,9 @@ export async function generatePrayerChat(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      // No `model` field: this Agent's model is fixed server-side on the
+      // Apologist dashboard, and an explicit model string is rejected.
       body: JSON.stringify({
-        model: modelId,
         messages: [
           { role: "system", content: buildSystemPrompt(prayerContext) },
           ...messages,
@@ -82,7 +82,7 @@ export async function streamPrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }
 ): Promise<ReadableStream<string>> {
-  const { apiKey, base, modelId } = getConfig();
+  const { apiKey, base } = getConfig();
 
   const controller = new AbortController();
   const connectTimeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -95,8 +95,8 @@ export async function streamPrayerChat(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      // No `model` field: see generatePrayerChat above.
       body: JSON.stringify({
-        model: modelId,
         stream: true,
         messages: [
           { role: "system", content: buildSystemPrompt(prayerContext) },

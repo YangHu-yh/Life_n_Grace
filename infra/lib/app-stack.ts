@@ -28,7 +28,7 @@ export class LifeNGraceAppStack extends cdk.Stack {
       memorySize: 1536,
       timeout: cdk.Duration.seconds(120),
       vpc: base.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [base.lambdaSecurityGroup],
       logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
@@ -39,9 +39,8 @@ export class LifeNGraceAppStack extends cdk.Stack {
         JOURNAL_ENCRYPTION_KEY: base.appSecrets
           .secretValueFromJson("JOURNAL_ENCRYPTION_KEY")
           .unsafeUnwrap(),
-        // APOLOGIST_* intentionally unset — companion shows its friendly
-        // "not yet available" message until the key + NAT are provisioned
-        // (project-plan v2.1, risk R11).
+        APOLOGIST_API_KEY: base.appSecrets.secretValueFromJson("APOLOGIST_API_KEY").unsafeUnwrap(),
+        APOLOGIST_API_URL: base.appSecrets.secretValueFromJson("APOLOGIST_API_URL").unsafeUnwrap(),
         APOLOGIST_TRANSLATION: "esv"
       }
     });
