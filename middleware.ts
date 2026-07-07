@@ -30,5 +30,10 @@ export async function middleware(request: NextRequest) {
 // Only guard the authenticated workspace routes. API routes keep their own
 // getUserIdFromRequest checks (defense in depth); everything else is public.
 export const config = {
-  matcher: ["/prayers/:path*", "/companion/:path*", "/profile/:path*"]
+  matcher: [
+    "/prayers/:path*",
+    "/companion/:path*",
+    "/profile/:path*",
+    "/topics/:path*"
+  ]
 };

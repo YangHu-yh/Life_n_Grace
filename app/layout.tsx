@@ -2,6 +2,8 @@ import "./globals.css";
 import Link from "next/link";
 import { Newsreader, Outfit } from "next/font/google";
 import SiteHeader from "@/components/SiteHeader";
+import CompanionPanel from "@/components/CompanionPanel";
+import { CompanionPanelProvider } from "@/components/CompanionPanelProvider";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -32,8 +34,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${newsreader.variable}`}>
       <body>
+        <CompanionPanelProvider>
         <SiteHeader />
         <main>{children}</main>
+        <CompanionPanel />
         <footer>
           <div style={{ maxWidth: 1120, margin: "0 auto" }}>
             <p>Life-n-Grace is a prayer companion for daily reflection.</p>
@@ -44,6 +48,7 @@ export default function RootLayout({
             </div>
           </div>
         </footer>
+        </CompanionPanelProvider>
       </body>
     </html>
   );

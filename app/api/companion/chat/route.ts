@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamPrayerChat, ApologistMessage } from "@/lib/llm/apologist";
 import { getUserIdFromRequest } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+
+// Per-user cap on Apologist calls — the topics pages and the slide-out panel
+// add several new call sites, and there was previously no limiting at all
+// beyond auth. Full usage-tier gating (P3-3) stays out of scope.
+const CHAT_LIMIT = 20;
+const CHAT_WINDOW_MS = 5 * 60 * 1000;
 
 function buildFallbackReply(topic: string) {
   return [
@@ -40,6 +47,17 @@ export async function POST(request: NextRequest) {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const rate = checkRateLimit(`companion:${userId}`, CHAT_LIMIT, CHAT_WINDOW_MS);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many companion requests. Please try again shortly." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rate.retryAfterSeconds) }
+        }
+      );
     }
 
     const { messages, prayerContext } = await request.json();

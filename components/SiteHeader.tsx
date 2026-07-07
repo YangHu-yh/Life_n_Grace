@@ -35,6 +35,7 @@ export default function SiteHeader() {
   const links = isAuthed
     ? [
         { href: "/prayers", label: "Prayers" },
+        { href: "/topics", label: "Topics" },
         { href: "/companion", label: "Companion" },
         { href: "/profile", label: "Profile" }
       ]
