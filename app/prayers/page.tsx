@@ -127,7 +127,10 @@ export default function PrayersPage() {
   const [journalFilter, setJournalFilter] = useState<
     "all" | "active" | "history" | "prayer-linked"
   >("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("columns");
+  // "list" is the default: it interleaves each prayer with its linked
+  // journal entry in one view, avoiding the wall-vs-workspace duplicate-look
+  // that "columns" (kanban + a separate journal section) still shows.
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
   const [journalTitle, setJournalTitle] = useState("");
