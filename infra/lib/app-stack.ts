@@ -9,6 +9,14 @@ interface AppStackProps extends cdk.StackProps {
   base: LifeNGraceBaseStack;
 }
 
+// Lambda Function URLs can't be referenced from the same function's own
+// environment (the URL doesn't exist until after the function is created —
+// a circular CloudFormation dependency), so this is hardcoded rather than
+// derived from the `fnUrl` construct below. If the Lambda/stack is ever
+// recreated, update this constant and redeploy (see infra/README.md's
+// standing note on Function URL stability / the custom-domain follow-up).
+const APP_BASE_URL = "https://v6flaqacud5cunfhg34hiqtkci0zpbpn.lambda-url.us-east-1.on.aws";
+
 export class LifeNGraceAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
@@ -33,6 +41,7 @@ export class LifeNGraceAppStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
         NODE_ENV: "production",
+        APP_BASE_URL,
         MAIN_DATABASE_URL: `postgresql://lifeuser:${dbPassword}@${dbHost}:5432/life_n_grace_main`,
         JOURNAL_DATABASE_URL: `postgresql://lifeuser:${dbPassword}@${dbHost}:5432/life_n_grace_journal`,
         AUTH_JWT_SECRET: base.appSecrets.secretValueFromJson("AUTH_JWT_SECRET").unsafeUnwrap(),

@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { appUrl } from "@/lib/app-origin";
 
-// Keep this self-contained (jose only) — importing lib/auth would pull
-// bcryptjs into the edge bundle. The cookie name mirrors lib/auth.ts.
+// Keep this self-contained (jose + app-origin only) — importing lib/auth
+// would pull bcryptjs into the edge bundle. The cookie name mirrors lib/auth.ts.
 const TOKEN_COOKIE = "auth_token";
 
 function getSecret() {
@@ -23,8 +24,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const loginUrl = new URL("/login", request.url);
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.redirect(appUrl(request, "/login"));
 }
 
 // Only guard the authenticated workspace routes. API routes keep their own

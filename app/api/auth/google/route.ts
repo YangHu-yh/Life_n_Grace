@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { appOrigin, appUrl } from "@/lib/app-origin";
 import {
   GOOGLE_STATE_COOKIE,
   googleAuthUrl,
@@ -10,11 +11,11 @@ import {
 // user to Google's consent screen. Inert until GOOGLE_CLIENT_ID/SECRET exist.
 export async function GET(request: NextRequest) {
   if (!isGoogleConfigured()) {
-    return NextResponse.redirect(new URL("/login?error=google_unavailable", request.url));
+    return NextResponse.redirect(appUrl(request, "/login?error=google_unavailable"));
   }
 
   const state = crypto.randomBytes(16).toString("hex");
-  const response = NextResponse.redirect(googleAuthUrl(request.nextUrl.origin, state));
+  const response = NextResponse.redirect(googleAuthUrl(appOrigin(request), state));
   response.cookies.set(GOOGLE_STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: "lax",

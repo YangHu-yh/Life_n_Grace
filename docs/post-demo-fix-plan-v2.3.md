@@ -4,11 +4,13 @@
 
 ## Progress
 
-- [x] 1. Reminders DELETE
-- [x] 2. Signup redirect + Google OAuth activation — code complete (incl. the `app-stack.ts` env lines); the ops/credentials checklist (Google Cloud Console client, Secrets Manager keys, `cdk deploy`, live round-trip check) is deferred to a session with AWS access. **Do not `cdk deploy` before adding `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to the `life-n-grace/app` secret.**
-- [x] 3. Prayer Wall / Journal consistency fix — code + local verification complete; remaining for a credentialed session: `prisma db push` (journal schema, adds `ownsLinkedPrayer`) against RDS, then run `scripts/backfill-journal-prayer-links.ts` once (dry run first, then `APPLY=1`).
-- [x] 4. Prayer topics + companion panel
+- [x] 1. Reminders DELETE — code shipped, deployed, live-verified (create+delete via API).
+- [x] 2. Signup redirect + Google OAuth activation — code shipped, Google Cloud Console client created, secrets in Secrets Manager, `cdk deploy` done, image deployed. **Bug found + fixed during live smoke test**: `request.nextUrl.origin` resolved to the Lambda Web Adapter's internal address (`0.0.0.0:3000`) instead of the public Function URL, breaking Google's `redirect_uri` match. Fixed via a hardcoded `APP_BASE_URL` env var (`infra/lib/app-stack.ts`) + new `lib/app-origin.ts` helpers used at every absolute-redirect site (OAuth routes, verify-email, middleware — the browser round-trip surfaced that the post-consent `/prayers` redirect and middleware `/login` redirect had the same bug) — redeployed and re-verified, all redirects now resolve to the public domain. **Still needed**: an actual browser click-through of the Google consent screen (requires a human + registered test-user Google account) to confirm the full round-trip.
+- [x] 3. Prayer Wall / Journal consistency fix — code shipped, `prisma db push` ran against RDS (adds `ownsLinkedPrayer`), backfill script run (dry run then `APPLY=1`) — fixed the exact "Health" prayer bug from the original report (lane `REROUTED`, journal status was stuck `ACTIVE`, now `HISTORY`). Live-verified: lane-change cascade, delete cascade for owned prayers, both confirmed via API.
+- [x] 4. Prayer topics + companion panel — code shipped, deployed, live-verified: `/topics` correctly gated (307 unauthenticated, 200 authenticated), companion chat with `prayerContext` returns a real contextual response.
 - [x] `docs/project-plan.md` updated to v2.3 (mark done items, add new backlog)
+
+**Deployed to production** (Lambda `life-n-grace-demo`, Function URL `https://v6flaqacud5cunfhg34hiqtkci0zpbpn.lambda-url.us-east-1.on.aws/`). Everything above verified live via API except the Google consent screen click-through, which needs a human in a browser.
 
 ---
 

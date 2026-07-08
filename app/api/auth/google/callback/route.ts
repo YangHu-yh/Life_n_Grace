@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prismaMain } from "@/lib/db/main";
 import { authCookieOptions, signAuthToken, TOKEN_COOKIE } from "@/lib/auth";
+import { appOrigin, appUrl } from "@/lib/app-origin";
 import {
   GOOGLE_STATE_COOKIE,
   isGoogleConfigured
@@ -12,7 +13,7 @@ const GOOGLE_JWKS = createRemoteJWKSet(
 );
 
 function loginError(request: NextRequest, code: string) {
-  const response = NextResponse.redirect(new URL(`/login?error=${code}`, request.url));
+  const response = NextResponse.redirect(appUrl(request, `/login?error=${code}`));
   response.cookies.set(GOOGLE_STATE_COOKIE, "", { path: "/", maxAge: 0 });
   return response;
 }
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: process.env.GOOGLE_CLIENT_ID!,
         client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: `${request.nextUrl.origin}/api/auth/google/callback`,
+        redirect_uri: `${appOrigin(request)}/api/auth/google/callback`,
         grant_type: "authorization_code"
       })
     });
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     const token = await signAuthToken(user.id);
 
-    const response = NextResponse.redirect(new URL("/prayers", request.url));
+    const response = NextResponse.redirect(appUrl(request, "/prayers"));
     response.cookies.set(TOKEN_COOKIE, token, authCookieOptions());
     response.cookies.set(GOOGLE_STATE_COOKIE, "", { path: "/", maxAge: 0 });
     return response;
