@@ -127,10 +127,9 @@ export default function PrayersPage() {
   const [journalFilter, setJournalFilter] = useState<
     "all" | "active" | "history" | "prayer-linked"
   >("all");
-  // "list" is the default: it interleaves each prayer with its linked
-  // journal entry in one view, avoiding the wall-vs-workspace duplicate-look
-  // that "columns" (kanban + a separate journal section) still shows.
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  // Kanban is the Prayer Wall proper and stays the default; List/Rows are
+  // secondary, opt-in views over the same (now-consistent) data.
+  const [viewMode, setViewMode] = useState<ViewMode>("columns");
 
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
   const [journalTitle, setJournalTitle] = useState("");
@@ -783,9 +782,7 @@ export default function PrayersPage() {
             flexWrap: "wrap"
           }}
         >
-          <h3 style={{ marginTop: 0 }}>
-            {viewMode === "columns" ? "Prayer wall" : "Prayer wall & journal"}
-          </h3>
+          <h3 style={{ marginTop: 0 }}>Prayer Wall</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {VIEW_MODES.map((mode) => (
               <button
