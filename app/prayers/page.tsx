@@ -124,9 +124,6 @@ export default function PrayersPage() {
     daysPrayedLast30: 0,
     totalPrayerDays: 0
   });
-  const [journalFilter, setJournalFilter] = useState<
-    "all" | "active" | "history" | "prayer-linked"
-  >("all");
   // Kanban is the Prayer Wall proper and stays the default; List/Rows are
   // secondary, opt-in views over the same (now-consistent) data.
   const [viewMode, setViewMode] = useState<ViewMode>("columns");
@@ -166,15 +163,6 @@ export default function PrayersPage() {
     ],
     [prayerBoard]
   );
-
-  const filteredJournals = useMemo(() => {
-    if (journalFilter === "active") return activeJournals;
-    if (journalFilter === "history") return historyJournals;
-    if (journalFilter === "prayer-linked") {
-      return allJournals.filter((entry) => !!entry.relatedPrayerId);
-    }
-    return allJournals;
-  }, [journalFilter, activeJournals, historyJournals, allJournals]);
 
   // list/rows modes interleave prayers with their linked journal entries in
   // one list (newest prayers first), with journal-only entries at the end.
@@ -893,81 +881,6 @@ export default function PrayersPage() {
           </>
         )}
       </div>
-
-      {viewMode === "columns" && (
-      <div className="card">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
-            flexWrap: "wrap"
-          }}
-        >
-          <div>
-            <h3 style={{ marginTop: 0 }}>Prayer journal workspace</h3>
-            <p className="muted" style={{ marginBottom: 0 }}>
-              View history and active entries, then create new prayer journal entries in a
-              focused modal without leaving this page.
-            </p>
-          </div>
-          <button className="button" type="button" onClick={openJournalModal}>
-            Create new prayer journal
-          </button>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-            marginTop: 16
-          }}
-        >
-          <span className="muted">Filter entries:</span>
-          <button
-            className={`button ${journalFilter === "all" ? "" : "button-outline"}`}
-            type="button"
-            onClick={() => setJournalFilter("all")}
-          >
-            All
-          </button>
-          <button
-            className={`button ${journalFilter === "history" ? "" : "button-outline"}`}
-            type="button"
-            onClick={() => setJournalFilter("history")}
-          >
-            History
-          </button>
-          <button
-            className={`button ${journalFilter === "active" ? "" : "button-outline"}`}
-            type="button"
-            onClick={() => setJournalFilter("active")}
-          >
-            Active
-          </button>
-          <button
-            className={`button ${journalFilter === "prayer-linked" ? "" : "button-outline"}`}
-            type="button"
-            onClick={() => setJournalFilter("prayer-linked")}
-          >
-            Wall-linked
-          </button>
-        </div>
-        <div className="grid" style={{ marginTop: 16 }}>
-          {filteredJournals.map((entry) => renderJournalCard(entry))}
-          {!filteredJournals.length && (
-            <div className="card-soft">
-              <p className="muted">No prayer journal entries for this filter.</p>
-              <button className="button" type="button" onClick={openJournalModal}>
-                Create new prayer journal
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      )}
 
       <div className="card">
         <h3>Prayer day streak</h3>
