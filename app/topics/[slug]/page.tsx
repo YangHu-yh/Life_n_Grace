@@ -42,49 +42,33 @@ export default function TopicDetailPage() {
     );
   }
 
-  // Both buttons reuse the existing companion chat plumbing end-to-end —
-  // a synthetic single-turn message with the verse as prayerContext.
+  // One bounded JSON call to the purpose-built topic-prayer endpoint (the
+  // server owns the prompt — the client only names the topic and verse).
   async function generatePrayer() {
-    if (!verse) return;
+    if (!topic || !verse) return;
     setIsGenerating(true);
     setNotice(null);
     setPrayer("");
     try {
-      const response = await fetch("/api/companion/chat", {
+      const response = await fetch("/api/companion/topic-prayer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [
-            {
-              role: "user",
-              content: `Write a short prayer (under 100 words) on the theme of "${topic!.title}", drawing on this verse: ${verse.reference} — "${verse.text}". Respond with only the prayer itself.`
-            }
-          ],
-          prayerContext: {
-            topic: topic!.title,
-            notes: `${verse.reference} — ${verse.text}`
-          }
+          slug: topic.slug,
+          verseIndex: verseIndex % topic.verses.length
         })
       });
       if (response.status === 429) {
         setNotice("Companion needs a short rest — please try again in a moment.");
         return;
       }
-      if (!response.ok || !response.body) {
-        setNotice("Could not reach Companion right now. Please try again.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.prayer) {
+        setNotice(data.error ?? "Could not reach Companion right now. Please try again.");
         return;
       }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        setPrayer(accumulated);
-      }
-      accumulated += decoder.decode();
-      if (accumulated) setPrayer(accumulated);
+      setPrayer(data.prayer);
+      if (data.notice) setNotice(data.notice);
     } catch {
       setNotice("Could not reach the server. Please try again.");
     } finally {
