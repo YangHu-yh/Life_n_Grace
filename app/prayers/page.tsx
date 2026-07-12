@@ -28,13 +28,7 @@ type JournalEntry = {
   updatedAt: string;
 };
 
-type ViewMode = "columns" | "list" | "rows";
-
-const VIEW_MODES: Array<{ key: ViewMode; label: string }> = [
-  { key: "columns", label: "Columns" },
-  { key: "list", label: "List" },
-  { key: "rows", label: "Rows" }
-];
+type ViewMode = "columns" | "list";
 
 const LANE_LABELS: Record<PrayerLane, string> = {
   ACTIVE: "Active",
@@ -124,8 +118,8 @@ export default function PrayersPage() {
     daysPrayedLast30: 0,
     totalPrayerDays: 0
   });
-  // Kanban is the Prayer Wall proper and stays the default; List/Rows are
-  // secondary, opt-in views over the same (now-consistent) data.
+  // Kanban is the Prayer Wall proper and stays the default; the toggle
+  // switches to List, a secondary view over the same (now-consistent) data.
   const [viewMode, setViewMode] = useState<ViewMode>("columns");
 
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
@@ -164,7 +158,7 @@ export default function PrayersPage() {
     [prayerBoard]
   );
 
-  // list/rows modes interleave prayers with their linked journal entries in
+  // list mode interleaves prayers with their linked journal entries in
   // one list (newest prayers first), with journal-only entries at the end.
   const journalsByPrayerId = useMemo(() => {
     const map = new Map<string, JournalEntry[]>();
@@ -384,9 +378,8 @@ export default function PrayersPage() {
     setIsJournalModalOpen(true);
   }
 
-  // Takes the current *effective* collapsed state — in rows mode cards are
-  // collapsed by default without a stored entry, so flipping the raw stored
-  // value would be a no-op on first click.
+  // Takes the current *effective* collapsed state so a card without a stored
+  // entry still flips correctly on first click.
   function togglePrayerCardCollapsed(prayerId: string, currentlyCollapsed: boolean) {
     setCollapsedPrayerCards((prev) => ({ ...prev, [prayerId]: !currentlyCollapsed }));
   }
@@ -396,8 +389,6 @@ export default function PrayersPage() {
   }
 
   function expandAllCards() {
-    // Explicit false (not just clearing) so rows mode's collapsed-by-default
-    // cards expand too.
     setCollapsedPrayerCards(
       Object.fromEntries(allPrayers.map((prayer) => [prayer.id, false]))
     );
@@ -511,11 +502,29 @@ export default function PrayersPage() {
 
   function renderPrayerCard(
     prayer: Prayer,
-    options: { compact?: boolean; draggable?: boolean } = {}
+    options: { listRow?: boolean; draggable?: boolean } = {}
   ) {
-    const { compact = false, draggable = true } = options;
-    // rows mode starts collapsed; an explicit toggle always wins.
-    const isCollapsed = collapsedPrayerCards[prayer.id] ?? compact;
+    const { listRow = false, draggable = true } = options;
+    const isCollapsed = collapsedPrayerCards[prayer.id] ?? false;
+
+    // Collapsed list rows shrink to a single scannable line.
+    if (listRow && isCollapsed) {
+      return (
+        <div key={prayer.id} className="sticker prayer-card row-compact">
+          <strong>{prayer.topic}</strong>
+          <span className="pill">{LANE_LABELS[prayer.lane]}</span>
+          <p className="muted row-preview">{prayer.notes ?? "No notes yet."}</p>
+          <button
+            className="button button-outline"
+            type="button"
+            onClick={() => togglePrayerCardCollapsed(prayer.id, true)}
+          >
+            Expand
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div
         key={prayer.id}
@@ -622,11 +631,35 @@ export default function PrayersPage() {
 
   function renderJournalCard(
     entry: JournalEntry,
-    options: { nested?: boolean; compact?: boolean } = {}
+    options: { nested?: boolean; listRow?: boolean } = {}
   ) {
-    const { nested = false, compact = false } = options;
-    const isCollapsed = collapsedJournalCards[entry.id] ?? compact;
+    const { nested = false, listRow = false } = options;
+    const isCollapsed = collapsedJournalCards[entry.id] ?? false;
     const isLinked = !!entry.relatedPrayerId;
+    const statusLabel = entry.status === "ACTIVE" ? "Active" : "History";
+
+    // Collapsed list rows shrink to a single scannable line.
+    if (listRow && isCollapsed) {
+      return (
+        <div
+          key={entry.id}
+          className="card-soft row-compact"
+          style={nested ? { marginLeft: 20 } : undefined}
+        >
+          <strong>{entry.title}</strong>
+          <span className="pill">Journal · {statusLabel}</span>
+          <p className="muted row-preview">{entry.content}</p>
+          <button
+            className="button button-outline"
+            type="button"
+            onClick={() => toggleJournalCardCollapsed(entry.id, true)}
+          >
+            Expand
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div
         key={entry.id}
@@ -644,9 +677,8 @@ export default function PrayersPage() {
           <div>
             <strong>{entry.title}</strong>
             <p className="muted" style={{ margin: "4px 0 0" }}>
-              {nested && "Journal entry · "}
-              {entry.status}
-              {isLinked && " · follows its wall card"}
+              Journal entry · {statusLabel}
+              {isLinked && " · status follows its prayer card"}
             </p>
           </div>
           <button
@@ -682,7 +714,7 @@ export default function PrayersPage() {
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
               {isLinked ? (
                 <span className="pill">
-                  Status follows the wall card&apos;s lane
+                  Status follows its prayer card&apos;s lane
                 </span>
               ) : (
                 <button
@@ -771,18 +803,33 @@ export default function PrayersPage() {
           }}
         >
           <h3 style={{ marginTop: 0 }}>Prayer Wall</h3>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {VIEW_MODES.map((mode) => (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div className="view-toggle">
               <button
-                key={mode.key}
-                className={`button ${viewMode === mode.key ? "" : "button-outline"}`}
                 type="button"
-                style={{ padding: "6px 12px" }}
-                onClick={() => setViewMode(mode.key)}
+                className={`view-toggle-label ${viewMode === "columns" ? "is-active" : ""}`}
+                onClick={() => setViewMode("columns")}
               >
-                {mode.label}
+                Wall
               </button>
-            ))}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={viewMode === "list"}
+                aria-label="Switch between Wall and List view"
+                className="view-switch"
+                onClick={() =>
+                  setViewMode(viewMode === "columns" ? "list" : "columns")
+                }
+              />
+              <button
+                type="button"
+                className={`view-toggle-label ${viewMode === "list" ? "is-active" : ""}`}
+                onClick={() => setViewMode("list")}
+              >
+                List
+              </button>
+            </div>
             <button
               className="button button-outline"
               type="button"
@@ -801,24 +848,18 @@ export default function PrayersPage() {
             </button>
           </div>
         </div>
-        {viewMode !== "columns" && (
-          <div className="grid" style={{ marginTop: 16, gap: viewMode === "rows" ? 8 : 12 }}>
+        {viewMode === "list" && (
+          <div className="grid" style={{ marginTop: 16, gap: 12 }}>
             {prayersNewestFirst.map((prayer) => (
               <div key={prayer.id} className="grid" style={{ gap: 8 }}>
-                {renderPrayerCard(prayer, {
-                  compact: viewMode === "rows",
-                  draggable: false
-                })}
+                {renderPrayerCard(prayer, { listRow: true, draggable: false })}
                 {(journalsByPrayerId.get(prayer.id) ?? []).map((entry) =>
-                  renderJournalCard(entry, {
-                    nested: true,
-                    compact: viewMode === "rows"
-                  })
+                  renderJournalCard(entry, { nested: true, listRow: true })
                 )}
               </div>
             ))}
             {unlinkedJournals.map((entry) =>
-              renderJournalCard(entry, { compact: viewMode === "rows" })
+              renderJournalCard(entry, { listRow: true })
             )}
             {!prayersNewestFirst.length && !unlinkedJournals.length && (
               <p className="muted">No prayers or journal entries yet.</p>

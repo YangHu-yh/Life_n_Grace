@@ -298,6 +298,96 @@ a {
   box-shadow: var(--shadow);
 }
 
+/* Wall/List view toggle switch */
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.view-toggle-label {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.view-toggle-label.is-active {
+  color: var(--accent);
+}
+
+.view-switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.view-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #faf8f1;
+  box-shadow: var(--shadow);
+  transition: left 0.15s ease;
+}
+
+.view-switch[aria-checked="true"]::after {
+  left: 22px;
+}
+
+/* Collapsed list-view rows: one scannable line, tight padding */
+.sticker.row-compact,
+.card-soft.row-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+}
+
+.row-compact strong {
+  flex-shrink: 0;
+  max-width: 40%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-compact .pill {
+  flex-shrink: 0;
+}
+
+.row-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Cap at a readable line length so rows don't sprawl on wide monitors */
+  max-width: 64ch;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-compact .button {
+  padding: 4px 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .kanban-board {
   display: grid;
   gap: 16px;
