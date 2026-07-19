@@ -1,10 +1,25 @@
-const FROM = process.env.EMAIL_FROM ?? "Life-n-Grace <noreply@lifengrace.app>";
+// The sender address and provider are pure configuration — swapping the temp
+// Gmail for the formal address later is an env/secret change, zero code (see
+// DEPLOYMENT.md "Changing the sender email").
+// `||` not `??`: on Lambda unset keys arrive as empty strings, which must
+// still fall back to the default.
+const FROM = process.env.EMAIL_FROM || "Life-n-Grace <noreply@lifengrace.app>";
+
+function isSmtpConfigured(): boolean {
+  return Boolean(
+    process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  );
+}
 
 // Email delivery is optional until a provider is configured. Callers use
 // isEmailConfigured() to decide whether flows that REQUIRE delivery (email
 // verification) should be enforced or softened.
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY) || process.env.EMAIL_PROVIDER === "ses";
+  return (
+    Boolean(process.env.RESEND_API_KEY) ||
+    process.env.EMAIL_PROVIDER === "ses" ||
+    isSmtpConfigured()
+  );
 }
 
 async function sendEmail(to: string, subject: string, html: string) {
@@ -21,6 +36,25 @@ async function sendEmail(to: string, subject: string, html: string) {
         }
       })
     );
+    return;
+  }
+
+  // SMTP: the temp-testing path (e.g. a Gmail address with an app password,
+  // host smtp.gmail.com port 587) and a general escape hatch for any
+  // provider Resend/SES don't cover.
+  if (isSmtpConfigured()) {
+    const nodemailer = (await import("nodemailer")).default;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const transport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port,
+      secure: port === 465, // implicit TLS on 465; STARTTLS otherwise
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+    await transport.sendMail({ from: FROM, to, subject, html });
     return;
   }
 

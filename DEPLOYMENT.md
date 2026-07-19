@@ -56,3 +56,32 @@ This repo includes a local Postgres setup to make Prisma migrations reproducible
 
 - Add a queue (SQS) for heavy LLM workloads.
 - Add Redis (ElastiCache) for caching prayer generation results.
+
+## Changing the sender email
+
+The sender identity is pure configuration — no code changes, ever:
+
+- **`EMAIL_FROM`** — the visible From address/name.
+- **Provider** — first match wins: `EMAIL_PROVIDER="ses"` → SES; else
+  `SMTP_HOST`+`SMTP_USER`+`SMTP_PASS` all set → SMTP; else `RESEND_API_KEY` →
+  Resend; else email is off (flows soften: signups auto-verify, reminder
+  sends are logged and skipped).
+
+**Temp phase (Gmail):** in the `life-n-grace/app` secret set
+`EMAIL_FROM` to the Gmail address, `SMTP_HOST=smtp.gmail.com`,
+`SMTP_PORT=587`, `SMTP_USER` = the address, `SMTP_PASS` = an app password
+(myaccount.google.com/apppasswords — requires 2FA on the account), and leave
+`EMAIL_PROVIDER` empty. Gmail rewrites the From header to the authenticated
+account, so `EMAIL_FROM`'s address part must be that same Gmail address.
+Sending limit ~500/day — fine for testing, not launch.
+
+**Formal address later:** verify the domain in SES (SPF/DKIM — needs the
+custom domain from Sprint 8/G3), then in the same secret set
+`EMAIL_PROVIDER="ses"` and `EMAIL_FROM="Life-n-Grace <noreply@your-domain>"`.
+The SMTP_* values are then ignored; clear them at leisure.
+
+Both switches are Secrets Manager value edits. Remember the standing gotcha:
+CloudFormation caches resolved dynamic references, so after changing secret
+VALUES force the Lambda environment to refresh (touch the env in a
+`cdk deploy`, or `aws lambda update-function-configuration`) — a plain
+redeploy of the same template will not pick them up.

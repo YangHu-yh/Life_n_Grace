@@ -73,7 +73,20 @@ export class LifeNGraceAppStack extends cdk.Stack {
         // node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
         REMINDER_CRON_SECRET: base.appSecrets
           .secretValueFromJson("REMINDER_CRON_SECRET")
-          .unsafeUnwrap()
+          .unsafeUnwrap(),
+        // Email sender config — all six keys must EXIST in the secret before
+        // deploy (secretValueFromJson fails on missing keys), but empty-string
+        // values are fine and mean "email off". Temp-Gmail testing: set
+        // EMAIL_FROM to the Gmail address, SMTP_HOST=smtp.gmail.com,
+        // SMTP_PORT=587, SMTP_USER=the address, SMTP_PASS=an app password.
+        // Formal address later: change these secret values only — no code.
+        // See DEPLOYMENT.md "Changing the sender email".
+        EMAIL_PROVIDER: base.appSecrets.secretValueFromJson("EMAIL_PROVIDER").unsafeUnwrap(),
+        EMAIL_FROM: base.appSecrets.secretValueFromJson("EMAIL_FROM").unsafeUnwrap(),
+        SMTP_HOST: base.appSecrets.secretValueFromJson("SMTP_HOST").unsafeUnwrap(),
+        SMTP_PORT: base.appSecrets.secretValueFromJson("SMTP_PORT").unsafeUnwrap(),
+        SMTP_USER: base.appSecrets.secretValueFromJson("SMTP_USER").unsafeUnwrap(),
+        SMTP_PASS: base.appSecrets.secretValueFromJson("SMTP_PASS").unsafeUnwrap()
       }
     });
 
