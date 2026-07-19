@@ -1,9 +1,14 @@
 import * as cdk from "aws-cdk-lib";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as route53 from "aws-cdk-lib/aws-route53";
+import * as route53targets from "aws-cdk-lib/aws-route53-targets";
 import { Construct } from "constructs";
 import { LifeNGraceBaseStack } from "./base-stack";
 
@@ -13,10 +18,13 @@ interface AppStackProps extends cdk.StackProps {
 
 // Lambda Function URLs can't be referenced from the same function's own
 // environment (the URL doesn't exist until after the function is created —
-// a circular CloudFormation dependency), so this is hardcoded rather than
-// derived from the `fnUrl` construct below. If the Lambda/stack is ever
-// recreated, update this constant and redeploy (see infra/README.md's
-// standing note on Function URL stability / the custom-domain follow-up).
+// a circular CloudFormation dependency; the same cycle bars referencing the
+// CloudFront distribution below), so this is hardcoded rather than derived
+// from a construct. After the first deploy that creates the CloudFront
+// distribution (Sprint 8 / G3), switch this to the DistributionDomain output
+// (or the custom domain, if configured) and redeploy — then redirects and
+// reminder-cron calls flow through the stable entry point instead of the
+// fragile Function URL.
 const APP_BASE_URL = "https://v6flaqacud5cunfhg34hiqtkci0zpbpn.lambda-url.us-east-1.on.aws";
 
 export class LifeNGraceAppStack extends cdk.Stack {
@@ -96,7 +104,80 @@ export class LifeNGraceAppStack extends cdk.Stack {
       targets: [new targets.ApiDestination(reminderDestination)]
     });
 
+    // ---------------------------------------------------------------------
+    // Stable public entry point (Sprint 8 / G3, kills risk R12).
+    //
+    // CloudFront in front of the Function URL: the distribution's
+    // *.cloudfront.net domain survives a Lambda/stack recreation (only the
+    // origin changes), so the Google OAuth redirect URI and the mobile apps'
+    // baked-in base URL stop depending on the fragile Function URL.
+    //
+    // Optionally attach a real custom domain by passing CDK context:
+    //   cdk deploy -c customDomain=app.example.com \
+    //              -c hostedZoneId=Z123EXAMPLE -c hostedZoneName=example.com
+    // (zone must already exist in Route53; cert auto-validates via DNS —
+    // this stack is us-east-1, which is exactly what CloudFront requires).
+    //
+    // Post-deploy checklist (either flavor):
+    //   1. Set APP_BASE_URL above to the new domain and redeploy.
+    //   2. Re-register the Google OAuth redirect URI against it.
+    //   3. Point SES domain identity at it when email lands (Sprint 9 note).
+    const customDomain = this.node.tryGetContext("customDomain") as string | undefined;
+    const hostedZoneId = this.node.tryGetContext("hostedZoneId") as string | undefined;
+    const hostedZoneName = this.node.tryGetContext("hostedZoneName") as string | undefined;
+    const hasCustomDomain = Boolean(customDomain && hostedZoneId && hostedZoneName);
+
+    const hostedZone = hasCustomDomain
+      ? route53.HostedZone.fromHostedZoneAttributes(this, "AppZone", {
+          hostedZoneId: hostedZoneId!,
+          zoneName: hostedZoneName!
+        })
+      : undefined;
+    const certificate = hasCustomDomain
+      ? new acm.Certificate(this, "AppCertificate", {
+          domainName: customDomain!,
+          validation: acm.CertificateValidation.fromDns(hostedZone)
+        })
+      : undefined;
+
+    // Fn.select(2, split("/", url)) turns "https://xyz.lambda-url..." into
+    // its bare domain at deploy time.
+    const fnUrlDomain = cdk.Fn.select(2, cdk.Fn.split("/", fnUrl.url));
+    const distribution = new cloudfront.Distribution(this, "AppDistribution", {
+      comment: "life-n-grace stable entry point in front of the Lambda Function URL",
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(fnUrlDomain, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY
+        }),
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        // The app is SSR + per-user APIs — CloudFront is here for URL
+        // stability (and TLS at the edge), not caching.
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        // MUST NOT forward the viewer Host header: Function URLs route by
+        // their own hostname and 403 on anything else.
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS
+      },
+      ...(hasCustomDomain ? { domainNames: [customDomain!], certificate } : {})
+    });
+
+    if (hasCustomDomain && hostedZone) {
+      new route53.ARecord(this, "AppAliasRecord", {
+        zone: hostedZone,
+        recordName: customDomain,
+        target: route53.RecordTarget.fromAlias(
+          new route53targets.CloudFrontTarget(distribution)
+        )
+      });
+    }
+
     new cdk.CfnOutput(this, "FunctionName", { value: fn.functionName });
     new cdk.CfnOutput(this, "FunctionUrl", { value: fnUrl.url });
+    new cdk.CfnOutput(this, "DistributionDomain", {
+      value: distribution.distributionDomainName
+    });
+    if (hasCustomDomain) {
+      new cdk.CfnOutput(this, "CustomDomain", { value: customDomain! });
+    }
   }
 }
