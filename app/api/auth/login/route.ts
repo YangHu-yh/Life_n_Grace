@@ -54,7 +54,9 @@ export async function POST(request: NextRequest) {
     }
     const token = await signAuthToken(user.id);
     await setAuthCookie(token);
-    return NextResponse.json({ ok: true });
+    // Token in the body is for mobile clients (secure-store + Bearer header);
+    // web keeps using the httpOnly cookie and ignores it.
+    return NextResponse.json({ ok: true, token });
   } catch (error) {
     console.error("[POST /api/auth/login]", error);
     return NextResponse.json({ error: "Login failed." }, { status: 500 });

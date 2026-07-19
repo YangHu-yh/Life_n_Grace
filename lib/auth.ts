@@ -4,7 +4,12 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
 export const TOKEN_COOKIE = "auth_token";
-const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+// 30 days (was 7): decided for mobile (Sprint 9 / G6) — the apps persist the
+// token in the device secure store and a weekly forced re-login is hostile
+// mobile UX. One lifetime for both transports keeps a single code path; a
+// refresh endpoint is deliberately deferred until real usage demands it
+// (documented in docs/mobile-app-plan.md Phase 0).
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 // Shared cookie options for handlers that set the cookie on a custom
 // response (e.g. OAuth redirects) instead of via cookies().
@@ -43,7 +48,12 @@ export async function signAuthToken(userId: string) {
 }
 
 export async function getUserIdFromRequest(request: NextRequest) {
-  const token = request.cookies.get(TOKEN_COOKIE)?.value;
+  // Cookie for web; Authorization: Bearer for mobile clients (Sprint 9 / G6).
+  // Same JWT, same verification — transport is the only difference.
+  const bearer = request.headers.get("authorization");
+  const token =
+    request.cookies.get(TOKEN_COOKIE)?.value ??
+    (bearer?.startsWith("Bearer ") ? bearer.slice(7) : undefined);
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());

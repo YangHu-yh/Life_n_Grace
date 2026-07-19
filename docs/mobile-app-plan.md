@@ -60,13 +60,18 @@ mobile/
 
 The API is already mobile-friendly except for auth:
 
-1. **Bearer-token support**: `lib/auth.ts:getUserIdFromRequest` reads only the
-   `auth_token` cookie. Add a fallback to the `Authorization: Bearer <jwt>`
-   header (same JWT, same verification) — cookies keep working for the web,
-   mobile sends the header. Add a `POST /api/auth/login` response variant (or
-   just read the existing `Set-Cookie`? No — return `{ token }` in the JSON
-   body when the client sends `X-Client: mobile` or an explicit
-   `?tokenInBody=1`) so the app can store it in `expo-secure-store`.
+1. **Bearer-token support** — ✅ **shipped (Sprint 9)**:
+   `lib/auth.ts:getUserIdFromRequest` now falls back to the
+   `Authorization: Bearer <jwt>` header (same JWT, same verification) when the
+   cookie is absent, and `POST /api/auth/login` always returns `{ token }` in
+   the JSON body (simpler than a client flag; the body is only readable by a
+   caller that just proved it holds valid credentials — web keeps the httpOnly
+   cookie and ignores the field). Store it in `expo-secure-store`.
+   **Token lifetime decision (G6): 30 days, one lifetime for both transports**
+   (`TOKEN_TTL_SECONDS` in `lib/auth.ts`, was 7 days) — weekly forced re-login
+   is hostile mobile UX, and a single TTL keeps one code path. A refresh
+   endpoint is deliberately deferred until real usage demands it; when it
+   comes, it slots into `lib/auth.ts` without changing the transport contract.
 2. **CORS**: not needed — native fetch has no browser origin restrictions.
 3. **Streaming chat**: decide per Expo SDK capability at build time. Expo SDK
    52+ (`expo/fetch`) supports streaming responses; if it proves flaky on
