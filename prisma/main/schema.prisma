@@ -91,6 +91,9 @@ model ReminderSetting {
   time      String
   timezone  String
   enabled   Boolean  @default(true)
+  // Idempotency guard for the delivery cron: one send per reminder per local
+  // day (compared in the reminder's own timezone).
+  lastSentAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

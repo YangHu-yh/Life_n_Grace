@@ -51,6 +51,22 @@ export async function sendVerificationEmail(to: string, verifyLink: string) {
   );
 }
 
+export async function sendReminderEmail(to: string) {
+  const prayersLink = `${(process.env.APP_BASE_URL ?? "").replace(/\/$/, "")}/prayers`;
+  await sendEmail(
+    to,
+    "Your daily prayer reminder",
+    `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
+      <h2>Time to pray</h2>
+      <p>This is your daily reminder to spend a moment with God. Your prayer wall is waiting for you.</p>
+      <a href="${prayersLink}" style="display:inline-block;padding:12px 24px;background:#2f6bff;color:#fff;border-radius:6px;text-decoration:none">Open your prayer wall</a>
+      <p style="margin-top:24px;color:#6b7280;font-size:14px">You can change or delete this reminder any time from your profile.</p>
+    </div>
+    `
+  );
+}
+
 export async function sendPasswordResetEmail(to: string, resetLink: string) {
   await sendEmail(
     to,

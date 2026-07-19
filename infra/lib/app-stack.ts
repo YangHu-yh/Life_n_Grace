@@ -1,5 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
@@ -57,6 +59,12 @@ export class LifeNGraceAppStack extends cdk.Stack {
         GOOGLE_CLIENT_ID: base.appSecrets.secretValueFromJson("GOOGLE_CLIENT_ID").unsafeUnwrap(),
         GOOGLE_CLIENT_SECRET: base.appSecrets
           .secretValueFromJson("GOOGLE_CLIENT_SECRET")
+          .unsafeUnwrap(),
+        // Add REMINDER_CRON_SECRET to the life-n-grace/app secret BEFORE the
+        // next deploy (same constraint as the GOOGLE_* keys above). Generate:
+        // node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+        REMINDER_CRON_SECRET: base.appSecrets
+          .secretValueFromJson("REMINDER_CRON_SECRET")
           .unsafeUnwrap()
       }
     });
@@ -64,6 +72,28 @@ export class LifeNGraceAppStack extends cdk.Stack {
     const fnUrl = fn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM
+    });
+
+    // Reminder delivery cron (Sprint 9 / G5): EventBridge fires the app's
+    // secret-guarded run route every 15 minutes; the route computes which
+    // reminders are due in each one's own timezone (lastSentAt makes reruns
+    // idempotent, so the short interval is safe). The Connection sends the
+    // secret as the Authorization header value straight from Secrets Manager
+    // — never plaintext in the template.
+    const reminderConnection = new events.Connection(this, "ReminderCronConnection", {
+      authorization: events.Authorization.apiKey(
+        "Authorization",
+        base.appSecrets.secretValueFromJson("REMINDER_CRON_SECRET")
+      )
+    });
+    const reminderDestination = new events.ApiDestination(this, "ReminderCronDestination", {
+      connection: reminderConnection,
+      endpoint: `${APP_BASE_URL}/api/internal/reminders/run`,
+      httpMethod: events.HttpMethod.POST
+    });
+    new events.Rule(this, "ReminderCronRule", {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      targets: [new targets.ApiDestination(reminderDestination)]
     });
 
     new cdk.CfnOutput(this, "FunctionName", { value: fn.functionName });

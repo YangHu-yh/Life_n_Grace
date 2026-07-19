@@ -29,6 +29,22 @@ export async function PUT(request: NextRequest) {
       { status: 400 }
     );
   }
+  // Delivery (lib/reminders/delivery.ts) compares times lexicographically and
+  // resolves the timezone with Intl — enforce both at the door.
+  if (!["email", "push"].includes(String(channel))) {
+    return NextResponse.json({ error: "Invalid channel." }, { status: 400 });
+  }
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time))) {
+    return NextResponse.json(
+      { error: "Time must be HH:MM (24-hour, zero-padded)." },
+      { status: 400 }
+    );
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: String(timezone) });
+  } catch {
+    return NextResponse.json({ error: "Invalid timezone." }, { status: 400 });
+  }
 
   if (id) {
     const updated = await prismaMain.reminderSetting.updateMany({
