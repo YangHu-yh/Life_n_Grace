@@ -7,6 +7,18 @@
 > canonical) and `mobile-app-plan.md` (phases referenced below).
 > Cadence: 1-week sprints, single developer, continuing project-plan numbering.
 
+## Status (updated as work lands)
+
+- **S8 / G1 (deploy merged work)** — ⬜ needs an AWS-credentialed session: image rebuild + `aws lambda update-function-code`, plus `prisma db push` for the new `ReminderSetting.lastSentAt` column, plus `REMINDER_CRON_SECRET` added to the `life-n-grace/app` secret **before** `cdk deploy`.
+- **S8 / G2 (Google consent click-through)** — ⬜ human, ~10 min on the live URL.
+- **S8 / G3 (stable URL)** — ✅ code shipped: CloudFront distribution in front of the Function URL, optional custom domain via CDK context (`customDomain`/`hostedZoneId`/`hostedZoneName`). Deploy + `APP_BASE_URL` switch + Google redirect URI re-registration remain for a credentialed session.
+- **S8 / G4 (policy review)** — ⬜ human.
+- **S9 / G5 (reminders deliver)** — ✅ code shipped + locally verified: timezone-aware due logic, `lastSentAt` idempotency, secret-guarded `/api/internal/reminders/run`, EventBridge Connection→ApiDestination→15-min Rule in CDK, reminder PUT validation tightened (pre-mobile, per compat policy). SES domain identity still pending the custom domain.
+- **S9 / G6 (bearer auth)** — ✅ shipped + locally verified; token lifetime decided (30 days, documented in mobile-app-plan Phase 0).
+- **S9 / G7 (API compat policy)** — ✅ `docs/api-compatibility-policy.md`.
+
+---
+
 ## Direction adjustments (the "why" before the "what")
 
 Measured against the mission-statement pillars — **Consistency**, **Visualize
