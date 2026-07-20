@@ -5,8 +5,8 @@
 
 ## Progress
 
-- [ ] Phase 0 — API readiness (bearer-token auth, streaming decision)
-- [ ] Phase 1 — Expo scaffold + auth + prayer list + journal
+- [x] Phase 0 — API readiness — bearer auth + token-in-body shipped (Sprint 9); streaming decision deliberately waits for real-device testing in Phase 2
+- [x] Phase 1 — Expo scaffold + auth + prayer list + journal — code complete in `mobile/` (expo-router + TS, SDK 52): secure-store auth (login/signup/logout), unified prayer+journal list with tap-to-move lanes / mark-prayed / deletes, journal create+edit, profile + reminder settings (writes the device timezone). Verified by typecheck + a clean `expo export` Android bundle; still needs a real device run (`npx expo start` + Expo Go), Sentry (G9), and the store-account clocks (G10)
 - [ ] Phase 2 — Companion chat + topics
 - [ ] Phase 3 — Reminders as local notifications + polish
 - [ ] Phase 4 — Store builds, review, release (EAS)
