@@ -96,6 +96,27 @@ to testers.
 - Token in `expo-secure-store`; `lib/api.ts` attaches the Bearer header.
 - Lane moves via the existing tap-to-move pattern (no drag on mobile).
 
+## Device-testing tool decision (confirmed with the user)
+
+**Expo Go for Phase 1 smoke-testing only; development builds from Phase 2 on.**
+
+- **Phase 1 (now):** Expo Go — everything currently in `mobile/` is inside
+  Go's bundled module set, so `npx expo start` + QR scan is the fastest loop
+  and needs no accounts or builds.
+- **Phase 2 boundary (hard switch):** create a **development build**
+  (`expo-dev-client` via EAS Build, cloud-built — no local Xcode/Android
+  Studio). Reasons the switch is not optional: Sentry's native crash
+  reporting (G9) needs real native modules; notification support in Expo Go
+  is limited/shrinking on Android (reminders are a core pillar); Google
+  OAuth can never be tested in Go (the redirect URI would belong to Expo
+  Go's bundle id, not `app.lifengrace.mobile` / the `lifengrace://` scheme);
+  and the real binary's identity, deep links, and release-Hermes behavior
+  stay unverified in Go.
+- **Tester distribution (Sprint 10 closed test):** EAS **preview** builds
+  (internal-distribution APK / TestFlight) — profiles already exist in
+  `mobile/eas.json`.
+- **Store release (Phase 4):** EAS production builds, as already scoped.
+
 ## Phase 2 — Companion + topics
 
 - Topics list/detail: static content can ship inside the app bundle by
