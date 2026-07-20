@@ -113,6 +113,22 @@ model HabitCheckin {
   @@unique([userId, date])
 }
 
+// Shared library of AI-suggested verses per topic, beyond the static catalog
+// in lib/prayer-topics/topics.ts. Global (not per-user): once one request
+// fetched a verse from the LLM, later "find more verses" requests pull it
+// from here at zero AI cost. References never overlap the static catalog
+// (checked at insert) and are unique per topic.
+model TopicVerse {
+  id        String   @id @default(cuid())
+  topicSlug String
+  reference String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@unique([topicSlug, reference])
+  @@index([topicSlug, createdAt])
+}
+
 // Per-user daily AI usage counter (Sprint 11 / G12) — ports the Django
 // prototype's DailyGenerationQuota. date is midnight UTC (HabitCheckin
 // pattern). Counts only successful Apologist generations, not fallbacks.

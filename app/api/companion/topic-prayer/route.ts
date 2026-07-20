@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prismaMain } from "@/lib/db/main";
 import { generateTopicPrayer } from "@/lib/llm/apologist";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/security/rate-limit";
-import { getTopicBySlug } from "@/lib/prayer-topics/topics";
+import { getTopicBySlug, normalizeReference } from "@/lib/prayer-topics/topics";
 import {
   dailyAiLimit,
   getDailyAiUsage,
@@ -59,16 +60,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { slug, verseIndex } = await request.json();
+    const { slug, verseIndex, reference } = await request.json();
     const topic = typeof slug === "string" ? getTopicBySlug(slug) : undefined;
     if (!topic) {
       return NextResponse.json({ error: "Topic not found." }, { status: 404 });
     }
-    const index =
-      Number.isInteger(verseIndex) && verseIndex >= 0
-        ? verseIndex % topic.verses.length
-        : 0;
-    const verse = topic.verses[index];
+
+    // Server-authoritative verse resolution: by reference (covers both the
+    // static catalog and AI-suggested TopicVerse rows — the client never
+    // supplies verse text), falling back to the legacy index form.
+    let verse: { reference: string; text: string } | undefined;
+    if (typeof reference === "string" && reference.trim()) {
+      const wanted = normalizeReference(reference);
+      verse = topic.verses.find(
+        (candidate) => normalizeReference(candidate.reference) === wanted
+      );
+      if (!verse) {
+        const stored = await prismaMain.topicVerse.findMany({
+          where: { topicSlug: topic.slug },
+          take: 200
+        });
+        verse = stored.find(
+          (candidate) => normalizeReference(candidate.reference) === wanted
+        );
+      }
+      if (!verse) {
+        return NextResponse.json({ error: "Verse not found." }, { status: 404 });
+      }
+    } else {
+      const index =
+        Number.isInteger(verseIndex) && verseIndex >= 0
+          ? verseIndex % topic.verses.length
+          : 0;
+      verse = topic.verses[index];
+    }
 
     if (!process.env.APOLOGIST_API_KEY || !process.env.APOLOGIST_API_URL) {
       return NextResponse.json({

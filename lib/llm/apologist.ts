@@ -154,6 +154,92 @@ export async function generateTopicPrayer(
   }
 }
 
+export type SuggestedVerse = { reference: string; text: string };
+
+// Ask for additional Scripture on a topic, excluding references the app
+// already has (static catalog + TopicVerse library). One bounded JSON call,
+// same contract-with-fallback strategy as generateTopicPrayer. Callers are
+// responsible for deduping the result against their exclusion list again —
+// the model does not always honor exclusions.
+export async function generateTopicVerses(
+  topic: string,
+  description: string,
+  excludeReferences: string[],
+  count: number
+): Promise<SuggestedVerse[]> {
+  const { apiKey, base } = getConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  const translation = (process.env.APOLOGIST_TRANSLATION ?? "esv").toUpperCase();
+  const prompt =
+    `Return ONLY a valid JSON array (no markdown, no code fences, no preface). ` +
+    `Schema example: [{"reference": "Psalm 23:1", "text": "the exact verse text"}]. ` +
+    `List exactly ${count} Bible verses (${translation}) that speak to the theme ` +
+    `"${topic}" (${description}). Quote each verse text accurately and keep each ` +
+    `entry to a single verse or short passage. Do NOT include any of these ` +
+    `already-used references: ${excludeReferences.join("; ").slice(0, 1500)}.`;
+
+  try {
+    const response = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      // No `model` field: see generatePrayerChat below.
+      body: JSON.stringify({
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Apologist API returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (typeof raw !== "string" || !raw.trim()) {
+      throw new Error("Apologist API response contained no content");
+    }
+
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      throw new Error("Could not parse a verse list from the model response");
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Model response was not a JSON array");
+    }
+
+    // Keep only well-formed entries: a plausible verse reference and a sane
+    // text length. Anything else is dropped rather than guessed at.
+    const referencePattern = /^[1-3]?\s?[A-Za-z]+(?:\s[A-Za-z]+)?\s\d+:\d+(?:[-–]\d+)?$/;
+    return parsed
+      .filter(
+        (entry): entry is SuggestedVerse =>
+          typeof entry?.reference === "string" &&
+          typeof entry?.text === "string" &&
+          referencePattern.test(entry.reference.trim()) &&
+          entry.text.trim().length >= 10 &&
+          entry.text.trim().length <= 600
+      )
+      .map((entry) => ({
+        reference: entry.reference.trim(),
+        text: entry.text.trim()
+      }))
+      .slice(0, count);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Apologist API request timed out");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function generatePrayerChat(
   messages: ApologistMessage[],
   prayerContext?: { topic: string; notes?: string }

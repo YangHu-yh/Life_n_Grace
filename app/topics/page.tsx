@@ -28,7 +28,11 @@ export default function TopicsPage() {
             <p className="muted">{topic.description}</p>
             <p className="muted" style={{ marginBottom: 0 }}>
               {topic.verses.length} verses ·{" "}
-              {topic.verses.map((verse) => verse.reference).join(" · ")}
+              {topic.verses
+                .slice(0, 3)
+                .map((verse) => verse.reference)
+                .join(" · ")}
+              {topic.verses.length > 3 && ` · +${topic.verses.length - 3} more`}
             </p>
           </Link>
         ))}
