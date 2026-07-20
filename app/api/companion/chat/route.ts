@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { streamPrayerChat, ApologistMessage } from "@/lib/llm/apologist";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import {
+  dailyAiLimit,
+  getDailyAiUsage,
+  recordAiGeneration,
+  secondsUntilUtcMidnight
+} from "@/lib/llm/quota";
 
 // Per-user cap on Apologist calls — the topics pages and the slide-out panel
 // add several new call sites, and there was previously no limiting at all
@@ -60,6 +66,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Daily spend cap on top of the burst limiter (Sprint 11 / G12). Checked
+    // before the AI call; only successful generations count (see below).
+    const limit = dailyAiLimit();
+    if ((await getDailyAiUsage(userId)) >= limit) {
+      return NextResponse.json(
+        {
+          error: `You've reached today's limit of ${limit} companion prayers. Companion will be ready for you again tomorrow.`
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(secondsUntilUtcMidnight()) }
+        }
+      );
+    }
+
     const { messages, prayerContext } = await request.json();
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -92,6 +113,9 @@ export async function POST(request: NextRequest) {
       // Awaiting here means upstream connection failures reject before any
       // response bytes are sent — the catch below serves the fallback prayer.
       const apologistStream = await streamPrayerChat(safeMessages, safePrayerContext);
+      // Upstream accepted the call — that's what Apologist bills, so that's
+      // what we meter. The fallback path below deliberately doesn't count.
+      await recordAiGeneration(userId, "chat");
       const encoder = new TextEncoder();
       const readable = new ReadableStream({
         async start(controller) {

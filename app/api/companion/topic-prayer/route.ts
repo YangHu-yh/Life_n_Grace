@@ -3,6 +3,12 @@ import { generateTopicPrayer } from "@/lib/llm/apologist";
 import { getUserIdFromRequest } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { getTopicBySlug } from "@/lib/prayer-topics/topics";
+import {
+  dailyAiLimit,
+  getDailyAiUsage,
+  recordAiGeneration,
+  secondsUntilUtcMidnight
+} from "@/lib/llm/quota";
 
 // Shares the companion chat's per-user bucket so all Apologist call sites
 // draw from one credit budget (same limits as app/api/companion/chat).
@@ -38,6 +44,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Daily spend cap shared with companion chat (Sprint 11 / G12) — one
+    // budget across every Apologist call site.
+    const limit = dailyAiLimit();
+    if ((await getDailyAiUsage(userId)) >= limit) {
+      return NextResponse.json(
+        {
+          error: `You've reached today's limit of ${limit} companion prayers. Companion will be ready for you again tomorrow.`
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(secondsUntilUtcMidnight()) }
+        }
+      );
+    }
+
     const { slug, verseIndex } = await request.json();
     const topic = typeof slug === "string" ? getTopicBySlug(slug) : undefined;
     if (!topic) {
@@ -61,6 +82,8 @@ export async function POST(request: NextRequest) {
         topic.title,
         `${verse.reference} — ${verse.text}`
       );
+      // Meter only real generations — the fallback paths cost nothing.
+      await recordAiGeneration(userId, "topic-prayer");
       return NextResponse.json({ prayer });
     } catch (error) {
       console.error("[POST /api/companion/topic-prayer] generation failed:", error);

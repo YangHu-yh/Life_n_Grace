@@ -61,6 +61,9 @@ export class LifeNGraceAppStack extends cdk.Stack {
         APOLOGIST_API_KEY: base.appSecrets.secretValueFromJson("APOLOGIST_API_KEY").unsafeUnwrap(),
         APOLOGIST_API_URL: base.appSecrets.secretValueFromJson("APOLOGIST_API_URL").unsafeUnwrap(),
         APOLOGIST_TRANSLATION: "esv",
+        // Daily per-user cap on Apologist generations (Sprint 11 / G12);
+        // plain config, not a secret — edit here and redeploy to change.
+        AI_DAILY_LIMIT: "10",
         // Add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to the life-n-grace/app
         // secret BEFORE the next `cdk deploy` — secretValueFromJson fails at
         // deploy time if the JSON key is missing.

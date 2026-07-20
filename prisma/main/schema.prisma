@@ -27,6 +27,7 @@ model User {
   prayerRequests   PrayerRequest[]
   reminderSettings ReminderSetting[]
   habitCheckins    HabitCheckin[]
+  dailyAiUsage     DailyAiUsage[]
 }
 
 // Auth.js (NextAuth v5) adapter models — populated in Phase B of the auth
@@ -106,6 +107,21 @@ model HabitCheckin {
   date      DateTime
   completed Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+// Per-user daily AI usage counter (Sprint 11 / G12) — ports the Django
+// prototype's DailyGenerationQuota. date is midnight UTC (HabitCheckin
+// pattern). Counts only successful Apologist generations, not fallbacks.
+model DailyAiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

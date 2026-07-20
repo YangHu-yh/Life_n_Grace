@@ -16,6 +16,7 @@
 - **S9 / G5 (reminders deliver)** — ✅ code shipped + locally verified (incl. SMTP provider for temp-Gmail sending; formal-address swap is config-only, see DEPLOYMENT.md "Changing the sender email"): timezone-aware due logic, `lastSentAt` idempotency, secret-guarded `/api/internal/reminders/run`, EventBridge Connection→ApiDestination→15-min Rule in CDK, reminder PUT validation tightened (pre-mobile, per compat policy). SES domain identity still pending the custom domain.
 - **S9 / G6 (bearer auth)** — ✅ shipped + locally verified; token lifetime decided (30 days, documented in mobile-app-plan Phase 0).
 - **S9 / G7 (API compat policy)** — ✅ `docs/api-compatibility-policy.md`.
+- **S11 / G12 (daily AI quota)** — ✅ pulled forward, code shipped + locally verified: per-user `DailyAiUsage` counter (main DB — `prisma db push` needed on RDS), checked by both companion routes before the AI call, incremented only on successful generations (fallbacks are free), `AI_DAILY_LIMIT` env-configurable (CDK default 10), usage graphable via EMF metric `LifeNGrace/AiGenerations` by Route. Also fixed a latent double-close bug in the Apologist SSE stream that could silently discard buffered chat output.
 
 ---
 

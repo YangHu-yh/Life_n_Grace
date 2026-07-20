@@ -250,6 +250,18 @@ export async function streamPrayerChat(
       const reader = body.getReader();
       const decoder = new TextDecoder();
 
+      // Close exactly once: a second close() on a close-requested stream
+      // throws, which ERRORS the stream and silently discards any chunks a
+      // consumer hasn't read yet (bites whenever the upstream finishes
+      // before the consumer attaches).
+      let closed = false;
+      const closeOnce = () => {
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
+      };
+
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -260,7 +272,7 @@ export async function streamPrayerChat(
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6).trim();
             if (data === "[DONE]") {
-              controller.close();
+              closeOnce();
               return;
             }
             try {
@@ -276,7 +288,7 @@ export async function streamPrayerChat(
         }
       } finally {
         reader.releaseLock();
-        controller.close();
+        closeOnce();
       }
     },
   });
