@@ -85,3 +85,26 @@ CloudFormation caches resolved dynamic references, so after changing secret
 VALUES force the Lambda environment to refresh (touch the env in a
 `cdk deploy`, or `aws lambda update-function-configuration`) — a plain
 redeploy of the same template will not pick them up.
+
+## Custom domain cutover (lifengrace.com — acquired)
+
+Order matters; each step depends on the previous:
+
+1. **Route53 hosted zone** for `lifengrace.com`; point the registrar's
+   nameservers at it (propagation can take hours — start early).
+2. **Deploy CloudFront with the domain** (cert auto-validates via DNS in the
+   zone; the stack is us-east-1, which CloudFront requires):
+   `cdk deploy LifeNGraceApp -c customDomain=lifengrace.com -c hostedZoneId=<ZONE_ID> -c hostedZoneName=lifengrace.com`
+3. **Switch APP_BASE_URL** (constant in `infra/lib/app-stack.ts`) to
+   `https://lifengrace.com` and redeploy — redirects, reminder cron, and
+   emailed links now use the stable domain.
+4. **Re-register the Google OAuth redirect URI** as
+   `https://lifengrace.com/api/auth/google/callback` in Google Cloud Console
+   (keep the old Function URL one until verified working, then remove).
+5. **SES domain identity** for `lifengrace.com` (DKIM/SPF records into the
+   zone) → then flip email to the formal sender per "Changing the sender
+   email" above (`EMAIL_PROVIDER="ses"`, `EMAIL_FROM="Life-n-Grace
+   <noreply@lifengrace.com>"`).
+6. **Mobile**: update `apiBaseUrl` in `mobile/app.json` to
+   `https://lifengrace.com` — required before the FIRST store/preview build
+   (binaries bake the URL in; Expo Go picks it up on next start).

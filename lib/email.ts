@@ -3,7 +3,7 @@
 // DEPLOYMENT.md "Changing the sender email").
 // `||` not `??`: on Lambda unset keys arrive as empty strings, which must
 // still fall back to the default.
-const FROM = process.env.EMAIL_FROM || "Life-n-Grace <noreply@lifengrace.app>";
+const FROM = process.env.EMAIL_FROM || "Life-n-Grace <noreply@lifengrace.com>";
 
 function isSmtpConfigured(): boolean {
   return Boolean(
